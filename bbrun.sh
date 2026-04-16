@@ -23,6 +23,24 @@
 set -uo pipefail
 
 topdir=$(pwd)
+
+# running locally requires an ssh id for some reason 
+if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then 
+    ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem
+    echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
+    info "SSH key generated"
+fi 
+
+cat << EOF > ./config/kv_server.conf
+iplist=(
+    127.0.0.1
+    127.0.0.1
+    127.0.0.1
+    127.0.0.1
+    127.0.0.1
+)
+EOF
+
 cd $topdir/scripts/deploy 
 ./script/deploy_local.sh ./config/kv_server.conf
 cd $topdir
