@@ -26,8 +26,9 @@ topdir=$(pwd)
 # running locally requires an ssh id for some reason 
 if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then 
     ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem
-    echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 fi 
+
+echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 
 cat << EOF > ./config/kv_server.conf
 iplist=(
