@@ -1,7 +1,7 @@
 
 # build the image if it hasnt been built. ("docker image ls" to see docker containers)
 
-docker build -f Docker/Dockerfile resdb 
+docker build -f Docker/Dockerfile -t resdb 
 
 # run the docker container 
 
