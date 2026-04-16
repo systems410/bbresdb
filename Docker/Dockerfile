@@ -32,7 +32,9 @@ RUN apt-get update && apt-get install -y \
     openjdk-11-jdk \
     zip \
     unzip \
-    clang-format
+    clang-format \ 
+    ssh \ 
+    psmisc 
 
 # Install Bazel
 RUN curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.gpg \

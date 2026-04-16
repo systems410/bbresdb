@@ -1,50 +1,28 @@
 #!/usr/bin/env bash 
 
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Script to run deploy local. Depends on entroypoint.sh settinging up the config and SSH key  
 set -uo pipefail
 
-red="\x1B[31;1;1m"
-blue="\x1B[34;1;1m"
-yellow="\x1B[33;1;1m"
-cyan="\x1B[36;1;1m"
-green="\x1B[32;1;1m"
-ecolor="\x1B[0m"
-
-fatal() { 
-    echo -e "$red[FATAL]$ecolor\x1B[0m $1"
-    exit 1 
-}
-
-info() { 
-    echo -e "$blue[INFO]$ecolor $1"
-}
-
 topdir=$(pwd)
-
-(( $EUID != 0 )) && fatal "Run this script as root" 
-
-which killall > /dev/null || apt install psmisc
-
-which ssh > /dev/null || apt install ssh 
-
-if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then 
-    ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem
-    echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
-    info "SSH key generated"
-fi 
-
 cd $topdir/scripts/deploy 
-
-
-cat << EOF > ./config/kv_server.conf
-iplist=(
-    127.0.0.1
-    127.0.0.1
-    127.0.0.1
-    127.0.0.1
-    127.0.0.1
-)
-EOF
-
-info "Running deployment script" 
 ./script/deploy_local.sh ./config/kv_server.conf
 cd $topdir

@@ -25,3 +25,4 @@ gmon.out
 service/tools/data/cert
 scripts/deploy/resilientdb_app
 scripts/deploy/data
+
