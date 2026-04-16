@@ -40,11 +40,8 @@ fi
 
 cd $topdir/scripts/deploy 
 
-islocal=$(grep -w "127.0.0.1" ./config/kv_server.conf)
 
-if [[ -z islocal ]]; then 
-    info "Writing server config" 
-    cat << EOF > ./config/kv_server.conf
+cat << EOF > ./config/kv_server.conf
 iplist=(
     127.0.0.1
     127.0.0.1
@@ -53,7 +50,6 @@ iplist=(
     127.0.0.1
 )
 EOF
-fi 
 
 info "Running deployment script" 
 ./script/deploy_local.sh ./config/kv_server.conf
