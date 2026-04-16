@@ -22,7 +22,6 @@ resdb/
 100*_db/
 gmon.out
 .history/
-service/tools/data/cert
-scripts/deploy/resilientdb_app
-scripts/deploy/data/cert/admin.key.pri
-scripts/deploy/data/cert/admin.key.pub
+service/tools/data/cert/
+scripts/deploy/resilientdb_app/
+scripts/deploy/data/

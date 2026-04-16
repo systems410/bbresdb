@@ -40,6 +40,9 @@ iplist=(
 )
 EOF
 
+touch scripts/deploy/data/cert/admin.key.pub
+touch ascripts/deploy/data/cert/admin.key.pri
+
 cd $topdir/scripts/deploy 
 ./script/deploy_local.sh ./config/kv_server.conf
 cd $topdir
