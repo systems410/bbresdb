@@ -19,30 +19,55 @@
 # under the License.
 #
 
-set -uo pipefail
+set -euo pipefail
+
+red="\x1B[31;1;1m"
+blue="\x1B[34;1;1m"
+yellow="\x1B[33;1;1m"
+cyan="\x1B[36;1;1m"
+green="\x1B[32;1;1m"
+ecolor="\x1B[0m"
+
+outputlog="deploylocal_log.txt"
+
+success() { 
+    echo -e "$green[SUCCESS]$ecolor\x1B[0m $1"
+}
+
+fatal() { 
+    echo -e "$red[FATAL]$ecolor\x1B[0m $1"
+    exit 1 
+}
+
+fatallog() { 
+    echo -e "$red[FATAL]$ecolor\x1B[0m $1. Log written to $outputlog"
+    exit 1 
+}
+
+info() { 
+    echo -e "$blue[INFO]$ecolor $1"
+}
+
+trap 'fatal "Something went wrong..."' ERR
 
 topdir=$(pwd)
 
+[[ -f "entrypoint.sh" ]] || fatal "Script must be run from the top level directory of bbresdb"
+
 # running locally requires an ssh id for some reason 
 if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then 
-    ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem
+    info "SSH Key not found, press enter to each prompt"
+    ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem || fatal "Could not create create ssh key"
 fi 
 
 echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 
-cat << EOF > ./config/kv_server.conf
-iplist=(
-    127.0.0.1
-    127.0.0.1
-    127.0.0.1
-    127.0.0.1
-    127.0.0.1
-)
-EOF
-
-touch scripts/deploy/data/cert/admin.key.pub
-touch ascripts/deploy/data/cert/admin.key.pri
-
 cd $topdir/scripts/deploy 
-./script/deploy_local.sh ./config/kv_server.conf
+info "Running deployment script"
+./script/deploy_local.sh ./config/kv_server.conf &> "$outputlog" || fatallog "Deploy local failed"
 cd $topdir
+
+ps -A | grep kv_service > /dev/null || fatallog "Deploy local script succeeded, but kv_service is not running. "
+
+success "KV Servers succesfully running"
+
