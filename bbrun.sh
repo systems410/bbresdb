@@ -26,12 +26,6 @@ which killall > /dev/null || apt install psmisc
 
 which ssh > /dev/null || apt install ssh 
 
-if ! which bazel; then 
-    bazelpath=$(which bazel-6.0.0) || fatal "Bazel not found" 
-    info "Creating bazel symlink to /usr/bin/bazel from $bazelpath" 
-    ln "$bazelpath" "/usr/bin/bazel" 
-fi 
-
 if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then 
     ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem
     echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
