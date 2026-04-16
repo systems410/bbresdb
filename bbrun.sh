@@ -87,7 +87,7 @@ fi
 echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 
 cd $topdir/scripts/deploy 
-./script/deploy_local.sh ./config/kv_server.conf &> "$topdir/$outputlog" & 
+./script/deploy_local.sh ./config/kv_server.conf > "$topdir/$outputlog" & 
 show_loading "Deploying" || fatallog "Deploy local failed"
 
 cd $topdir

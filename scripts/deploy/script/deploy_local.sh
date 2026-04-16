@@ -77,7 +77,7 @@ bazel build ${server}
 if [ $? != 0 ]
 then
 	echo "Complile ${server} failed"
-	exit 0
+	exit 1
 fi
 
 # commands functions
