@@ -23,3 +23,4 @@ resdb/
 gmon.out
 .history/
 service/tools/data/cert
+scripts/deploy/resilientdb_app
