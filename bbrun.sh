@@ -22,6 +22,8 @@ topdir=$(pwd)
 
 (( $EUID != 0 )) && fatal "Run this script as root" 
 
+which killall > /dev/null || apt install psmisc
+
 which ssh > /dev/null || apt install ssh 
 
 if ! which bazel; then 
