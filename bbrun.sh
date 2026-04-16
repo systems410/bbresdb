@@ -30,6 +30,33 @@ ecolor="\x1B[0m"
 
 outputlog="deploylocal_log.txt"
 
+info() { 
+    echo -e "$blue[INFO]$ecolor $1"
+}
+
+show_loading() { 
+    local pid=$!
+    local message=$(info $1)
+    local dots=(" " "." ".." "...")
+
+    echo -ne "\x1B[?25l" 
+
+    while kill -0 "$pid" &> /dev/null; do 
+        for dot in "${dots[@]}"; do 
+            echo -ne "\x1B[2K" 
+            echo -n "$message$dot"
+            echo -ne "\r"
+            sleep 0.2
+            kill -0 "$pid" &> /dev/null || break;  
+        done
+    done 
+    echo -ne "\x1B[2K" 
+    wait "$pid"  
+    ret=$? 
+    echo -ne "\x1B[?25h" 
+    return $ret
+}
+
 success() { 
     echo -e "$green[SUCCESS]$ecolor\x1B[0m $1"
 }
@@ -40,13 +67,10 @@ fatal() {
 }
 
 fatallog() { 
-    echo -e "$red[FATAL]$ecolor\x1B[0m $1. Log written to $outputlog"
+    echo -e "$red[FATAL]$ecolor\x1B[0m $1. Log written to $topdir/$outputlog"
     exit 1 
 }
 
-info() { 
-    echo -e "$blue[INFO]$ecolor $1"
-}
 
 trap 'fatal "Something went wrong..."' ERR
 
@@ -63,11 +87,15 @@ fi
 echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 
 cd $topdir/scripts/deploy 
-info "Running deployment script"
-./script/deploy_local.sh ./config/kv_server.conf &> "$outputlog" || fatallog "Deploy local failed"
+./script/deploy_local.sh ./config/kv_server.conf &> "$topdir/$outputlog" & 
+show_loading "Deploying" || fatallog "Deploy local failed"
+
 cd $topdir
 
 ps -A | grep kv_service > /dev/null || fatallog "Deploy local script succeeded, but kv_service is not running. "
 
 success "KV Servers succesfully running"
+
+
+
 

@@ -19,6 +19,7 @@
 
 set -e
 
+
 # load environment parameters
 . ./script/env.sh
 
