@@ -19,7 +19,6 @@
 # under the License.
 #
 
-# Script to run deploy local. Depends on entroypoint.sh settinging up the config and SSH key  
 set -uo pipefail
 
 topdir=$(pwd)
