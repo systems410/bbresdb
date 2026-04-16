@@ -18,40 +18,23 @@
 #
 
 
-./script/deploy_local.sh $1
-. ./script/load_config.sh $1
-. ./script/env.sh
-
-home_path="./"
-server_name=`echo "$server" | awk -F':' '{print $NF}'`
-server_bin=${server_name}
+if  ! ps -A | grep kv_service > /dev/null; then 
+    echo "KV Service not running" 
+    exit 1
+fi 
 
 bazel run //benchmark/protocols/pbft:kv_service_tools -- $PWD/config_out/client.config 
 
 sleep 60
 
 echo "benchmark done"
-count=1
-for ip in ${iplist[@]};
-do
- echo "server bin:"${server_bin}
-killall -9 ${server_bin}
-((count++))
-done
+killall -9 kv_service
 
-while [ $count -gt 0 ]; do
-        wait $pids
-        count=`expr $count - 1`
-done
-
-idx=1
 echo "getting results"
-for ip in ${iplist[@]};
-do
-  echo "cp ${home_path}/${server_bin}.log ./${ip}_${idx}_log"
-  cp ${home_path}/resilientdb_app/${idx}/${server_bin}.log result_${ip}_${idx}_log
-  ((idx++))
-done
+
+for (( idx=1; idx<6; idx++ )); do 
+    cp ./resilientdb_app/${idx}/kv_service.log result_${idx}_log
+done 
 
 python3 performance/calculate_result.py `ls result_*_log` > results.log
 
