@@ -18,11 +18,12 @@
 #
 
 
-if  ! ps -A | grep kv_service > /dev/null; then 
+if  ! ps -A | grep kv_serv > /dev/null; then 
     echo "KV Service not running" 
     exit 1
 fi 
 
+grep "replica" config_out/client.config > /dev/null || cp ../../service/tools/config/interface/service.config config_out/client.config 
 bazel run //benchmark/protocols/pbft:kv_service_tools -- $PWD/config_out/client.config 
 
 sleep 60

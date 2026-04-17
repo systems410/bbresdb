@@ -1,6 +1,9 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
+#
 # distributed with this work for additional information
 # regarding copyright ownership.  The ASF licenses this file
 # to you under the Apache License, Version 2.0 (the
@@ -19,12 +22,19 @@
 
 set -e
 
-
 # load environment parameters
 . ./script/env.sh
 
 # load ip list
 . ./script/load_config.sh $1
+
+debug=0
+if [[ "$2" == "-d" ]]; then 
+    debug=1
+    which gdb > /dev/null || apt install gdb
+    debugid="${3:-5}"
+fi 
+
 
 script_path=${BAZEL_WORKSPACE_PATH}/scripts
 
@@ -137,34 +147,62 @@ while [ $count -gt 0 ]; do
 done
 
 echo "start to run" $PWD
-# Start server
-idx=1
-count=0
-for ip in ${deploy_iplist[@]};
-do
-  private_key="cert/node_"${idx}".key.pri"
-  cert="cert/cert_"${idx}".cert"
-  cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
-  ((count++))
-  ((idx++))
-  ((grafna_port++))
-done
 
-# Check ready logs
-idx=1
-for ip in ${deploy_iplist[@]};
-do
-  resp=""
-  while [ "$resp" = "" ]
+if ((debug == 0)); then 
+  # Start server
+  idx=1
+  count=0
+  for ip in ${deploy_iplist[@]};
   do
-    cd ${home_path}/${main_folder}/$idx;
-    resp=`grep "receive public size:${#iplist[@]}" ${server_bin}.log` 
-    if [ "$resp" = "" ]; then
-      sleep 1
-    fi
+    private_key="cert/node_"${idx}".key.pri"
+    cert="cert/cert_"${idx}".cert"
+    cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
+    ((count++))
+    ((idx++))
+    ((grafna_port++))
   done
-  ((idx++))
-done
+  # Check ready logs
+  idx=1
+  for ip in ${deploy_iplist[@]};
+  do
+    resp=""
+    while [ "$resp" = "" ]
+    do
+        cd ${home_path}/${main_folder}/$idx;
+        resp=`grep "receive public size:${#iplist[@]}" ${server_bin}.log` 
+        if [ "$resp" = "" ]; then
+        sleep 1
+        fi
+    done
+    ((idx++))
+    done
 
-echo "Servers are running....."
+    echo "Servers are running....."
+else 
+  # DEBUG MODE 
+  idx=1
+  count=0
+  debugport=0
+  for ip in ${deploy_iplist[@]};
+  do
+    if (( debugid != idx )); then 
+      private_key="cert/node_"${idx}".key.pri"
+      cert="cert/cert_"${idx}".cert"
+      cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
+    else
+      debugport="$grafna_port"
+    fi 
+    ((count++))
+    ((idx++))
+    ((grafna_port++))
+  done
+  private_key="cert/node_"${debugid}".key.pri"
+  cert="cert/cert_"${debugid}".cert"
+  cd ${home_path}/${main_folder}/$debugid
+  gdb -eval-command="set directories ../../../../" -eval-command="set logging file deploylocal.txt" --args ./${server_bin} server.config ${private_key} ${cert} ${debugport} 
+  
+fi 
+
+
+
 
