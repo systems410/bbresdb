@@ -103,7 +103,7 @@ function run_cmd(){
     ((i++))
   done
 
-  while [ $c-gt 0 ]; do
+  while [ $c -gt 0 ]; do
         wait $pids
         c=`expr $c - 1`
   done
@@ -118,7 +118,7 @@ killall -9 ${server_bin}
 
 if [ $performance ];
 then
-run_cmd "rm -rf ${home_path}/${main_folder}"
+ rm -rf ${home_path}/${main_folder}
 fi
 
 for (( i=1; i<6; i++ )); do
@@ -152,7 +152,8 @@ if ((debug == 0)); then
   do
     private_key="cert/node_"${idx}".key.pri"
     cert="cert/cert_"${idx}".cert"
-    cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
+    cd ${home_path}/${main_folder}/$idx; 
+    nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
     ((count++))
     ((idx++))
     ((grafna_port++))
