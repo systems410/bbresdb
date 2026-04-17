@@ -90,6 +90,7 @@ then
 	exit 1
 fi
 
+
 # commands functions
 function run_cmd(){
   echo "run cmd:"$1
@@ -114,12 +115,6 @@ function run_one_cmd(){
   $1
 }
 
-run_cmd "killall -9 ${server_bin}"
-if [ $performance ];
-then
-run_cmd "rm -rf ${home_path}/${main_folder}"
-fi
-
 idx=1
 for ip in ${deploy_iplist[@]};
 do
@@ -127,6 +122,13 @@ do
   ((count++))
   ((idx++))
 done
+
+run_cmd "killall -9 ${server_bin}"
+if [ $performance ];
+then
+run_cmd "rm -rf ${home_path}/${main_folder}"
+fi
+
 
 
 # upload config files and binary
