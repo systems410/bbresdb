@@ -18,23 +18,28 @@
 #
 
 
-if  ! ps -A | grep kv_serv > /dev/null; then 
-    echo "KV Service not running" 
-    exit 1
-fi 
+wd=$(pwd)
+cd ../../
+./bbrun.sh || exit 1
+cd "$wd"
+. ./script/env.sh
 
 grep "replica" config_out/client.config > /dev/null || cp ../../service/tools/config/interface/service.config config_out/client.config 
+
+server_name=`echo "$server" | awk -F':' '{print $NF}'`
+server_bin=${server_name}
+
 bazel run //benchmark/protocols/pbft:kv_service_tools -- $PWD/config_out/client.config 
 
 sleep 60
 
 echo "benchmark done"
-killall -9 kv_service
+killall -9 ${server_bin}
 
 echo "getting results"
-
+sleep 1
 for (( idx=1; idx<6; idx++ )); do 
-    cp ./resilientdb_app/${idx}/kv_service.log result_${idx}_log
+    cp ./resilientdb_app/${idx}/${server_bin}.log result_${idx}_log
 done 
 
 python3 performance/calculate_result.py `ls result_*_log` > results.log
@@ -42,3 +47,4 @@ python3 performance/calculate_result.py `ls result_*_log` > results.log
 rm -rf result_*_log
 echo "save result to results.log"
 cat results.log
+

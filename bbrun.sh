@@ -21,9 +21,6 @@
 
 set -eo pipefail
 
-export server=//benchmark/protocols/pbft:kv_server_performance
-export performance=true
-
 red="\x1B[31;1;1m"
 blue="\x1B[34;1;1m"
 yellow="\x1B[33;1;1m"

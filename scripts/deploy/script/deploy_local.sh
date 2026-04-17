@@ -64,7 +64,6 @@ mkdir -p ${output_path}
 
 deploy_iplist=${iplist[@]}
 
-
 echo "server src path:"${server_path}
 echo "server bazel bin path:"${bin_path}
 echo "server name:"${server_bin}
@@ -94,19 +93,19 @@ fi
 # commands functions
 function run_cmd(){
   echo "run cmd:"$1
-  count=1
-  idx=1
+  local c=1
+  local i=1
   for ip in ${deploy_iplist[@]};
   do
-    cd ${home_path}/${main_folder}/$idx; 
+    cd "${home_path}/${main_folder}/$i"; 
     `$1`
-    ((count++))
-    ((idx++))
+    ((c++))
+    ((i++))
   done
 
-  while [ $count -gt 0 ]; do
+  while [ $c-gt 0 ]; do
         wait $pids
-        count=`expr $count - 1`
+        c=`expr $c - 1`
   done
 }
 
@@ -115,21 +114,16 @@ function run_one_cmd(){
   $1
 }
 
-idx=1
-for ip in ${deploy_iplist[@]};
-do
-  run_one_cmd "mkdir -p ${home_path}/${main_folder}/$idx"
-  ((count++))
-  ((idx++))
-done
+killall -9 ${server_bin}
 
-run_cmd "killall -9 ${server_bin}"
 if [ $performance ];
 then
 run_cmd "rm -rf ${home_path}/${main_folder}"
 fi
 
-
+for (( i=1; i<6; i++ )); do
+  mkdir -p "${home_path}/${main_folder}/$i"
+done
 
 # upload config files and binary
 echo "upload configs"
