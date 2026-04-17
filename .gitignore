@@ -26,4 +26,5 @@ service/tools/data/cert/
 scripts/deploy/resilientdb_app/
 scripts/deploy/data/
 deploylocal_log.txt
+.gdb_history
 

@@ -1,12 +1,10 @@
 
-# build the image if it hasnt been built. ("docker image ls" to see docker containers)
 
-docker build -f Docker/Dockerfile -t <imagename> .
+# Create a bazel cache directory to store compiled files
+mkdir ../.bazelcache
 
-# run the docker container 
+# Create/run the container 
+docker compose up -d 
 
-mkdir ../.bazelcache  # make this to save compiled code 
-docker run -d -v .:/app -v ../.bazelcache:/root/.cache/bazel --cap-add SYS_PTRACE --security-opt seccomp=unconfined --name <containername> <imagename> 
-
-# open a shell in the container
-docker exec -it <containername> bash 
+# Start a shell in the container 
+docker exec -it bb bash 
