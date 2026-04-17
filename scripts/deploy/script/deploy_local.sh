@@ -1,6 +1,9 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
+#
 # distributed with this work for additional information
 # regarding copyright ownership.  The ASF licenses this file
 # to you under the Apache License, Version 2.0 (the
@@ -19,12 +22,19 @@
 
 set -e
 
-
 # load environment parameters
 . ./script/env.sh
 
 # load ip list
 . ./script/load_config.sh $1
+
+debug=0
+if [[ "$2" == "-d" ]]; then 
+    debug=1
+    which gdb > /dev/null || apt install gdb
+    debugid="${3:-5}"
+fi 
+
 
 script_path=${BAZEL_WORKSPACE_PATH}/scripts
 
@@ -54,7 +64,6 @@ mkdir -p ${output_path}
 
 deploy_iplist=${iplist[@]}
 
-
 echo "server src path:"${server_path}
 echo "server bazel bin path:"${bin_path}
 echo "server name:"${server_bin}
@@ -80,22 +89,23 @@ then
 	exit 1
 fi
 
+
 # commands functions
 function run_cmd(){
   echo "run cmd:"$1
-  count=1
-  idx=1
+  local c=1
+  local i=1
   for ip in ${deploy_iplist[@]};
   do
-    cd ${home_path}/${main_folder}/$idx; 
+    cd "${home_path}/${main_folder}/$i"; 
     `$1`
-    ((count++))
-    ((idx++))
+    ((c++))
+    ((i++))
   done
 
-  while [ $count -gt 0 ]; do
+  while [ $c -gt 0 ]; do
         wait $pids
-        count=`expr $count - 1`
+        c=`expr $c - 1`
   done
 }
 
@@ -104,20 +114,16 @@ function run_one_cmd(){
   $1
 }
 
-run_cmd "killall -9 ${server_bin}"
+killall -9 ${server_bin}
+
 if [ $performance ];
 then
-run_cmd "rm -rf ${home_path}/${main_folder}"
+ rm -rf ${home_path}/${main_folder}
 fi
 
-idx=1
-for ip in ${deploy_iplist[@]};
-do
-  run_one_cmd "mkdir -p ${home_path}/${main_folder}/$idx"
-  ((count++))
-  ((idx++))
+for (( i=1; i<6; i++ )); do
+  mkdir -p "${home_path}/${main_folder}/$i"
 done
-
 
 # upload config files and binary
 echo "upload configs"
@@ -137,34 +143,63 @@ while [ $count -gt 0 ]; do
 done
 
 echo "start to run" $PWD
-# Start server
-idx=1
-count=0
-for ip in ${deploy_iplist[@]};
-do
-  private_key="cert/node_"${idx}".key.pri"
-  cert="cert/cert_"${idx}".cert"
-  cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
-  ((count++))
-  ((idx++))
-  ((grafna_port++))
-done
 
-# Check ready logs
-idx=1
-for ip in ${deploy_iplist[@]};
-do
-  resp=""
-  while [ "$resp" = "" ]
+if ((debug == 0)); then 
+  # Start server
+  idx=1
+  count=0
+  for ip in ${deploy_iplist[@]};
   do
-    cd ${home_path}/${main_folder}/$idx;
-    resp=`grep "receive public size:${#iplist[@]}" ${server_bin}.log` 
-    if [ "$resp" = "" ]; then
-      sleep 1
-    fi
+    private_key="cert/node_"${idx}".key.pri"
+    cert="cert/cert_"${idx}".cert"
+    cd ${home_path}/${main_folder}/$idx; 
+    nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
+    ((count++))
+    ((idx++))
+    ((grafna_port++))
   done
-  ((idx++))
-done
+  # Check ready logs
+  idx=1
+  for ip in ${deploy_iplist[@]};
+  do
+    resp=""
+    while [ "$resp" = "" ]
+    do
+        cd ${home_path}/${main_folder}/$idx;
+        resp=`grep "receive public size:${#iplist[@]}" ${server_bin}.log` 
+        if [ "$resp" = "" ]; then
+        sleep 1
+        fi
+    done
+    ((idx++))
+    done
 
-echo "Servers are running....."
+    echo "Servers are running....."
+else 
+  # DEBUG MODE 
+  idx=1
+  count=0
+  debugport=0
+  for ip in ${deploy_iplist[@]};
+  do
+    if (( debugid != idx )); then 
+      private_key="cert/node_"${idx}".key.pri"
+      cert="cert/cert_"${idx}".cert"
+      cd ${home_path}/${main_folder}/$idx; nohup ./${server_bin} server.config ${private_key} ${cert} ${grafna_port} > ${server_bin}.log 2>&1 &
+    else
+      debugport="$grafna_port"
+    fi 
+    ((count++))
+    ((idx++))
+    ((grafna_port++))
+  done
+  private_key="cert/node_"${debugid}".key.pri"
+  cert="cert/cert_"${debugid}".cert"
+  cd ${home_path}/${main_folder}/$debugid
+  gdb -eval-command="set directories ../../../../" -eval-command="set logging file deploylocal.txt" --args ./${server_bin} server.config ${private_key} ${cert} ${debugport} 
+  
+fi 
+
+
+
 

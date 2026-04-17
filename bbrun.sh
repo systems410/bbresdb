@@ -19,7 +19,7 @@
 # under the License.
 #
 
-set -euo pipefail
+set -eo pipefail
 
 red="\x1B[31;1;1m"
 blue="\x1B[34;1;1m"
@@ -33,6 +33,12 @@ outputlog="deploylocal_log.txt"
 info() { 
     echo -e "$blue[INFO]$ecolor $1"
 }
+
+debug=0
+if [[ "$1" == "-d" ]]; then 
+    debug=1
+    debugid="${3:-5}"
+fi 
 
 show_loading() { 
     local pid=$!
@@ -84,17 +90,24 @@ if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then
     ssh-keygen -m PEM -t rsa -b 4096 -f ~/.ssh/id_rsa.pem || fatal "Could not create create ssh key"
 fi 
 
+
 echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 
-cd $topdir/scripts/deploy 
-./script/deploy_local.sh ./config/kv_server.conf > "$topdir/$outputlog" & 
-show_loading "Deploying" || fatallog "Deploy local failed"
+if (( debug == 0 )); then 
+    cd $topdir/scripts/deploy 
+    ./script/deploy_local.sh ./config/kv_server.conf > "$topdir/$outputlog" & 
+    show_loading "Deploying" || fatallog "Deploy local failed"
 
-cd $topdir
+    cd $topdir
 
-ps -A | grep kv_service > /dev/null || fatallog "Deploy local script succeeded, but kv_service is not running. "
+    ps -A | grep kv_serv > /dev/null || fatallog "Deploy local script succeeded, but kv_service is not running. "
 
-success "KV Servers succesfully running"
+    success "KV Servers succesfully running"
+else 
+    cd $topdir/scripts/deploy 
+    ./script/deploy_local.sh ./config/kv_server.conf "$@"
+    cd $topdir
+fi 
 
 
 

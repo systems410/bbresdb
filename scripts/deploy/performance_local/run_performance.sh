@@ -18,11 +18,14 @@
 #
 
 
-./script/deploy_local.sh $1
-. ./script/load_config.sh $1
+wd=$(pwd)
+cd ../../
+./bbrun.sh || exit 1
+cd "$wd"
 . ./script/env.sh
 
-home_path="./"
+grep "replica" config_out/client.config > /dev/null || cp ../../service/tools/config/interface/service.config config_out/client.config 
+
 server_name=`echo "$server" | awk -F':' '{print $NF}'`
 server_bin=${server_name}
 
@@ -31,30 +34,17 @@ bazel run //benchmark/protocols/pbft:kv_service_tools -- $PWD/config_out/client.
 sleep 60
 
 echo "benchmark done"
-count=1
-for ip in ${iplist[@]};
-do
- echo "server bin:"${server_bin}
 killall -9 ${server_bin}
-((count++))
-done
 
-while [ $count -gt 0 ]; do
-        wait $pids
-        count=`expr $count - 1`
-done
-
-idx=1
 echo "getting results"
-for ip in ${iplist[@]};
-do
-  echo "cp ${home_path}/${server_bin}.log ./${ip}_${idx}_log"
-  cp ${home_path}/resilientdb_app/${idx}/${server_bin}.log result_${ip}_${idx}_log
-  ((idx++))
-done
+sleep 1
+for (( idx=1; idx<6; idx++ )); do 
+    cp ./resilientdb_app/${idx}/${server_bin}.log result_${idx}_log
+done 
 
 python3 performance/calculate_result.py `ls result_*_log` > results.log
 
 rm -rf result_*_log
 echo "save result to results.log"
 cat results.log
+

@@ -1,0 +1,19 @@
+
+
+services:
+  app:
+    image: ${IMAGENAME:-bbresdb}  
+    container_name: ${CONTAINERNAME:-bb} 
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile
+    volumes:
+      - .:/app
+      - ../.bazelcache:/root/.cache/bazel
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    stdin_open: true  
+    tty: true         
+    command: tail -f /dev/null  

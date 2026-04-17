@@ -1,11 +1,10 @@
 
-# build the image if it hasnt been built. ("docker image ls" to see docker containers)
 
-docker build -f Docker/Dockerfile -t resdb .
+# Create a bazel cache directory to store compiled files
+mkdir ../.bazelcache
 
-# run the docker container 
+# Create/run the container 
+docker compose up -d 
 
-docker run -d -v .:/app --cap-add SYS_PTRACE --name "rs" resdb 
-
-# open a shell in the container
-docker exec -it rs bash 
+# Start a shell in the container 
+docker exec -it bb bash 
