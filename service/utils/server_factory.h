@@ -23,6 +23,7 @@
 #include "executor/common/transaction_manager.h"
 #include "platform/config/resdb_config_utils.h"
 #include "platform/consensus/ordering/pbft/consensus_manager_pbft.h"
+#include "platform/consensus/ordering/2pc/consensus_manager_2pc.h"
 #include "platform/networkstrate/service_network.h"
 
 namespace resdb {

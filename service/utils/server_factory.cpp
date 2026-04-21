@@ -33,7 +33,7 @@ std::unique_ptr<ServiceNetwork> ServerFactory::CreateResDBServer(
   }
   return std::make_unique<ServiceNetwork>(
       *config,
-      std::make_unique<ConsensusManagerPBFT>(*config, std::move(executor)));
+      std::make_unique<twopc::ConsensusManager2PC>(*config, std::move(executor)));
 }
 
 std::unique_ptr<ServiceNetwork> GenerateResDBServer(
