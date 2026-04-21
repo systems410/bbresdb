@@ -84,6 +84,8 @@ topdir=$(pwd)
 
 [[ -f "entrypoint.sh" ]] || fatal "Script must be run from the top level directory of bbresdb"
 
+which ssh > /dev/null || apt install ssh 
+
 # running locally requires an ssh id for some reason 
 if [[ ! -f "$HOME/.ssh/id_rsa.pem" ]]; then 
     info "SSH Key not found, press enter to each prompt"

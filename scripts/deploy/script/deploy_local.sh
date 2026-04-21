@@ -196,7 +196,7 @@ else
   private_key="cert/node_"${debugid}".key.pri"
   cert="cert/cert_"${debugid}".cert"
   cd ${home_path}/${main_folder}/$debugid
-  gdb -eval-command="set directories ../../../../" -eval-command="set logging file deploylocal.txt" --args ./${server_bin} server.config ${private_key} ${cert}  
+  gdb -ex "set directories ../../../../" -ex "set logging file deploylocal.txt" --args ./${server_bin} server.config ${private_key} ${cert}  
 #   gdb -eval-command="set directories ../../../../" -eval-command="set logging file deploylocal.txt" --args ./${server_bin} server.config ${private_key} ${cert} ${debugport} 
   
 fi 
