@@ -95,6 +95,7 @@ echo "key=$HOME/.ssh/id_rsa.pem" > $topdir/scripts/deploy/config/key.conf
 
 if (( debug == 0 )); then 
     cd $topdir/scripts/deploy 
+
     ./script/deploy_local.sh ./config/kv_server.conf > "$topdir/$outputlog" & 
     show_loading "Deploying" || fatallog "Deploy local failed"
 
@@ -108,7 +109,3 @@ else
     ./script/deploy_local.sh ./config/kv_server.conf "$@"
     cd $topdir
 fi 
-
-
-
-
