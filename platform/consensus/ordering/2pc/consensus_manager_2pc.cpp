@@ -206,7 +206,7 @@ int ConsensusManager2PC::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "CLIENT REQUEST" << std::endl;
+      std::cout << "[2PC] CLIENT REQUEST" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
@@ -217,11 +217,14 @@ int ConsensusManager2PC::InternalConsensusCommit(
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
       }
-      std::cout << "TYPE RESPONSE" << std::endl;
+      std::cout << "[2PC] TYPE RESPONSE" << std::endl;
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
+
+
+    // Received by the primary. Send the prepare messages to the replicas 
     case Request::TYPE_NEW_TXNS: {
-      std::cout << "TYPE NEW TXNS" << std::endl;
+      std::cout << "[2PC] TYPE NEW TXNS" << std::endl;
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -243,25 +246,29 @@ int ConsensusManager2PC::InternalConsensusCommit(
       }
       return ret;
     }
-    /* ------------------------------------ */
-    case Request::TYPE_PRE_PREPARE:
-      std::cout << "[2PC] TYPE PRE PREPARE" << std::endl;
-      std::cout << "[2PC] Primary ID: " << system_info_->GetPrimaryId() << std::endl;
-      return commitment_->ProcessProposeMsg(std::move(context),
-                                            std::move(request));
+
+    case Request::TYPE_VOTE_COMMIT: 
+      // here, need to then count up votes. if the vote count is == num replicas, 
+      // send the commit message 
+
+      std::cout << "[2PC] VOTE COMMIT" << std::endl;
+      return commitment_->ProcessVoteMsg(std::move(context), 
+                                         std::move(request));
+    
+
+    // Received by participants. Cast a vote
     case Request::TYPE_PREPARE:
       std::cout << "[2PC] TYPE PREPARE" << std::endl;
-      std::cout << "[2PC] Primary ID: " << system_info_->GetPrimaryId() << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
+
+    // Global descision on whether to abort or not 
     case Request::TYPE_COMMIT:
       std::cout << "[2PC} TYPE COMMIT" << std::endl;
-      std::cout << "[2PC] Primary ID: " << system_info_->GetPrimaryId() << std::endl;
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
-    /* ------------------------------------ */
 
-
+    // Other 
     case Request::TYPE_CHECKPOINT:
       std::cout << "TYPE CHECKPOINT" << std::endl;
       return checkpoint_manager_->ProcessCheckPoint(std::move(context),

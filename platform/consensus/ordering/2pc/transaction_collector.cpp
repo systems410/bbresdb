@@ -74,7 +74,6 @@ int TransactionCollector::AddRequest(
                        std::atomic<TransactionStatue>* status, bool force)>
         call_back) {
   if (request == nullptr) {
-    LOG(ERROR) << "request empty";
     return -2;
   }
 
@@ -99,7 +98,7 @@ int TransactionCollector::AddRequest(
   if (is_main_request) {
     auto request_info = std::make_unique<RequestInfo>();
     request_info->signature = signature;
-    request_info->request = std::move(request);
+    request_info->request = std::make_unique<Request>(*request);
     bool force = false;
     if (view_ && view_ < view && !is_prepared_) {
       force = true;
@@ -118,79 +117,81 @@ int TransactionCollector::AddRequest(
       return -2;
     }
     view_ = view;
-    call_back(*main_request->request.get(), 1, nullptr, &status_, force);
-    return 0;
-  } else {
-    if (enable_viewchange_) {
-      if (type == Request::TYPE_PREPARE) {
-        if (status_.load() <= TransactionStatue::READY_PREPARE) {
-          auto request_info = std::make_unique<RequestInfo>();
-          request_info->signature = signature;
-          request_info->request = std::make_unique<Request>(*request);
-          std::lock_guard<std::mutex> lk(mutex_);
-          if (is_prepared_) {
-            return 0;
-          }
-          prepared_proof_.push_back(std::move(request_info));
-          if (senders_[type].count(hash) == 0) {
-            senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
-          }
-          senders_[type][hash][sender_id] = 1;
-          call_back(*request, senders_[type][hash].count(), nullptr, &status_,
-                    false);
-          if (status_.load() == TransactionStatue::READY_COMMIT) {
-            is_prepared_ = true;
-            if (atomic_mian_request_.Reference() != nullptr &&
-                atomic_mian_request_.Reference()->request->hash() != hash) {
-              atomic_mian_request_.Clear();
-              for (auto it = other_main_request_.begin();
-                   it != other_main_request_.end(); it++) {
-                if ((*it)->request->hash() == hash) {
-                  auto request_info = std::make_unique<RequestInfo>();
-                  request_info->signature = (*it)->signature;
-                  request_info->request = std::move((*it)->request);
-                  atomic_mian_request_.Set(request_info);
-                  break;
-                }
-              }
-              other_main_request_.clear();
-            }
-            int pos = 0;
-            for (size_t i = 0; i < prepared_proof_.size(); i++) {
-              if (prepared_proof_[i]->request->hash() == hash) {
-                prepared_proof_[pos++] = std::move(prepared_proof_[i]);
-              }
-            }
-            prepared_proof_.erase(prepared_proof_.begin() + pos,
-                                  prepared_proof_.end());
-          }
-        }
-        return 0;
-      }
-    }
-    if (request->type() == Request::TYPE_COMMIT) {
-      if (request->has_data_signature() &&
-          request->data_signature().node_id() > 0) {
+  } 
+
+  if (enable_viewchange_) {
+    if (type == Request::TYPE_PREPARE) {
+      if (status_.load() <= TransactionStatue::READY_PREPARE) {
+        auto request_info = std::make_unique<RequestInfo>();
+        request_info->signature = signature;
+        request_info->request = std::make_unique<Request>(*request);
         std::lock_guard<std::mutex> lk(mutex_);
-        LOG(ERROR) << "add qc signature";
-        commit_certs_.push_back(request->data_signature());
+        if (is_prepared_) {
+          return 0;
+        }
+        prepared_proof_.push_back(std::move(request_info));
+        if (senders_[type].count(hash) == 0) {
+          senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
+        }
+        senders_[type][hash][sender_id] = 1;
+        call_back(*request, senders_[type][hash].count(), nullptr, &status_,
+                  false);
+        if (status_.load() == TransactionStatue::READY_COMMIT) {
+          is_prepared_ = true;
+          if (atomic_mian_request_.Reference() != nullptr &&
+            atomic_mian_request_.Reference()->request->hash() != hash) {
+            atomic_mian_request_.Clear();
+            for (auto it = other_main_request_.begin();
+                 it != other_main_request_.end(); it++) {
+              if ((*it)->request->hash() == hash) {
+                auto request_info = std::make_unique<RequestInfo>();
+                request_info->signature = (*it)->signature;
+                request_info->request = std::move((*it)->request);
+                atomic_mian_request_.Set(request_info);
+                break;
+              }
+            }
+            other_main_request_.clear();
+          }
+          int pos = 0;
+          for (size_t i = 0; i < prepared_proof_.size(); i++) {
+            if (prepared_proof_[i]->request->hash() == hash) {
+              prepared_proof_[pos++] = std::move(prepared_proof_[i]);
+            }
+          }
+          prepared_proof_.erase(prepared_proof_.begin() + pos,
+                                prepared_proof_.end());
+        }
       }
+      return 0;
     }
+  }
 
-    {
+  if (request->type() == Request::TYPE_COMMIT) {
+    std::cout << "[2PC] Into the type commit if block" << std::endl;
+    if (request->has_data_signature() &&
+        request->data_signature().node_id() > 0) {
       std::lock_guard<std::mutex> lk(mutex_);
-      if (senders_[type].count(hash) == 0) {
-        senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
-      }
-      senders_[type][hash][sender_id] = 1;
-      call_back(*request, senders_[type][hash].count(), nullptr, &status_,
-                false);
+      LOG(ERROR) << "add qc signature";
+      std::cout << "[2PC] Pushing commit cert " << std::endl; 
+      commit_certs_.push_back(request->data_signature());
     }
+  }
 
-    if (status_.load() == TransactionStatue::READY_EXECUTE) {
-      Commit();
-      return 1;
+  {
+    std::lock_guard<std::mutex> lk(mutex_);
+    if (senders_[type].count(hash) == 0) {
+      senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
     }
+    senders_[type][hash][sender_id] = 1;
+    call_back(*request, senders_[type][hash].count(), nullptr, &status_,
+              false);
+  }
+
+  if (status_.load() == TransactionStatue::READY_EXECUTE) {
+    std::cout << "[2PC] READY EXECUTE: Commit()" << std::endl;
+    Commit();
+    return 1;
   }
   return 0;
 }

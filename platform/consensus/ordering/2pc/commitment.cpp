@@ -64,8 +64,7 @@ void Commitment::SetPreVerifyFunc(
 
 void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 
-// Handle the user request and send a pre-prepare message to others.
-// TODO if not a primary, redicet to the primary replica.
+// Send a prepare request to each replica 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> user_request) {
   if (context == nullptr || context->signature.signature().empty()) {
@@ -139,7 +138,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
 
   global_stats_->RecordStateTime("request");
 
-  user_request->set_type(Request::TYPE_PRE_PREPARE);
+  user_request->set_type(Request::TYPE_PREPARE);
   user_request->set_current_view(message_manager_->GetCurrentView());
   user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
@@ -204,6 +203,7 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
     return -2;
   }
 
+
   if (request->sender_id() != config_.GetSelfInfo().id()) {
     if (pre_verify_func_ && !pre_verify_func_(*request)) {
       LOG(ERROR) << " check by the user func fail";
@@ -247,7 +247,39 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
-// If receive 2f+1 prepare message, broadcast a commit message.
+int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
+                                  std::unique_ptr<Request> request) {
+        
+
+  if (context == nullptr || context->signature.signature().empty()) {
+    LOG(ERROR) << "user request doesn't contain signature, reject"
+               << " context:" << (context == nullptr);
+    return -2;
+  }
+  uint64_t seq = request->seq();
+  if (request->is_recovery()) {
+    return message_manager_->AddConsensusMsg(context->signature,
+                                             std::move(request));
+  }
+  // Add request to message_manager.
+  std::cout << "[2PC] Adding Consensus Message" << std::endl;
+
+  std::unique_ptr<Request> global_decision = NewRequest(
+      Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id() 
+  );
+
+  CollectorResultCode ret =
+      message_manager_->AddConsensusMsg(context->signature, std::move(request));
+
+  if (ret == CollectorResultCode::STATE_CHANGED) {
+    // We have received all the commits we need. broadcast the global descision 
+    global_decision->clear_data(); 
+    replica_communicator_->BroadCast(*global_decision);
+  }
+  return ret == CollectorResultCode::INVALID ? -2 : 0;
+} 
+
+// Just send a vote to commit message as we are assuming no aborts 
 int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
   if (context == nullptr || context->signature.signature().empty()) {
@@ -265,38 +297,31 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     }
     return ret;
   }
-  // global_stats_->IncPrepare();
-  std::unique_ptr<Request> commit_request = NewRequest(
-      Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id());
-  commit_request->mutable_data_signature()->Clear();
-  // Add request to message_manager.
-  // If it has received enough same requests(2f+1), broadcast the commit
-  // message.
-  uint64_t seq = request->seq();
-  CollectorResultCode ret =
-      message_manager_->AddConsensusMsg(context->signature, std::move(request));
-  if (ret == CollectorResultCode::STATE_CHANGED) {
-    if (message_manager_->GetHighestPreparedSeq() < seq) {
-      message_manager_->SetHighestPreparedSeq(seq);
+
+  std::unique_ptr<Request> commit_vote = NewRequest(
+      Request::TYPE_VOTE_COMMIT, *request, config_.GetSelfInfo().id());
+    
+  commit_vote->mutable_data_signature()->Clear();
+  // If need qc, sign the data
+  if (need_qc_ && verifier_) {
+    auto signature_or = verifier_->SignMessage(commit_vote->hash());
+    if (!signature_or.ok()) {
+      LOG(ERROR) << "Sign message fail";
+      return -2;
     }
-    // If need qc, sign the data
-    if (need_qc_ && verifier_) {
-      auto signature_or = verifier_->SignMessage(commit_request->hash());
-      if (!signature_or.ok()) {
-        LOG(ERROR) << "Sign message fail";
-        return -2;
-      }
-      *commit_request->mutable_data_signature() = *signature_or;
-      // LOG(ERROR) << "sign hash"
-      //           << commit_request->data_signature().DebugString();
-    }
-    global_stats_->RecordStateTime("prepare");
-    replica_communicator_->BroadCast(*commit_request);
+    *commit_vote->mutable_data_signature() = *signature_or;
   }
-  return ret == CollectorResultCode::INVALID ? -2 : 0;
+
+  global_stats_->RecordStateTime("prepare");
+
+  // Send the vote back to the coordinator 
+  std::cout << "[2PC] SENDING COMMIT VOTE TO " << request->sender_id() << std::endl;
+  replica_communicator_->SendMessage(*commit_vote, request->sender_id());
+
+  return 1; 
+
 }
 
-// If receive 2f+1 commit message, commit the request.
 int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
                                  std::unique_ptr<Request> request) {
   if (context == nullptr || context->signature.signature().empty()) {
@@ -309,15 +334,9 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     return message_manager_->AddConsensusMsg(context->signature,
                                              std::move(request));
   }
-  // global_stats_->IncCommit();
-  // Add request to message_manager.
-  // If it has received enough same requests(2f+1), message manager will
-  // commit the request.
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    // LOG(ERROR)<<request->data().size();
-    // global_stats_->GetTransactionDetails(request->data());
     global_stats_->RecordStateTime("commit");
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
