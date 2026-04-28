@@ -144,6 +144,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
 
+  std::cout << "[2PC] Commitment::ProcessNewRequest: Broadcasting prepare message" << std::endl;
   replica_communicator_->BroadCast(*user_request);
 
   return 0;
