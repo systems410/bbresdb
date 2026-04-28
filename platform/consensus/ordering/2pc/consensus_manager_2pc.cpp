@@ -205,23 +205,28 @@ int ConsensusManager2PC::InternalConsensusCommit(
              << " is convery:" << request->is_recovery();
 
   switch (request->type()) {
+    // Received by the proxy 
     case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "CLIENT REQUEST" << std::endl;
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received client request message" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
+    // Received by the proxy 
     case Request::TYPE_RESPONSE:
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received response message" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
       }
-      std::cout << "TYPE RESPONSE" << std::endl;
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
+
+
+    // Received by the coordinator. Send the prepare messages to the replicas to get their vote 
     case Request::TYPE_NEW_TXNS: {
-      std::cout << "TYPE NEW TXNS" << std::endl;
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received txns message" << std::endl;
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -243,56 +248,49 @@ int ConsensusManager2PC::InternalConsensusCommit(
       }
       return ret;
     }
-    /* ------------------------------------ */
-    case Request::TYPE_PRE_PREPARE:
-      std::cout << "[2PC] TYPE PRE PREPARE" << std::endl;
-      std::cout << "[2PC] Primary ID: " << system_info_->GetPrimaryId() << std::endl;
-      return commitment_->ProcessProposeMsg(std::move(context),
-                                            std::move(request));
+
+    // Received by the coordinator, used to count up the number of votes 
+    case Request::TYPE_VOTE_COMMIT: 
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received vote to commit message" << std::endl;
+      return commitment_->ProcessVoteMsg(std::move(context), 
+                                         std::move(request));
+    
+
+    // Received by all participants. This is where they will respond with their vote 
     case Request::TYPE_PREPARE:
-      std::cout << "[2PC] TYPE PREPARE" << std::endl;
-      std::cout << "[2PC] Primary ID: " << system_info_->GetPrimaryId() << std::endl;
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received prepare message" << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
+
+    // Received by all participants. This is the global descision to commit 
     case Request::TYPE_COMMIT:
-      std::cout << "[2PC} TYPE COMMIT" << std::endl;
-      std::cout << "[2PC] Primary ID: " << system_info_->GetPrimaryId() << std::endl;
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received commit message" << std::endl;
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
-    /* ------------------------------------ */
 
-
+    // Other 
     case Request::TYPE_CHECKPOINT:
-      std::cout << "TYPE CHECKPOINT" << std::endl;
       return checkpoint_manager_->ProcessCheckPoint(std::move(context),
                                                     std::move(request));
     case Request::TYPE_STATUS_SYNC:
-      std::cout << "TYPE STATUS SYNC" << std::endl;
       return checkpoint_manager_->ProcessStatusSync(std::move(context),
                                                     std::move(request));
     case Request::TYPE_VIEWCHANGE:
-      std::cout << "TYPE VIEWCHANGE" << std::endl;
       return view_change_manager_->ProcessViewChange(std::move(context),
                                                      std::move(request));
     case Request::TYPE_NEWVIEW:
-      std::cout << "TYPE NEWVIEW" << std::endl;
       return view_change_manager_->ProcessNewView(std::move(context),
                                                   std::move(request));
     case Request::TYPE_QUERY:
-      std::cout << "TYPE QUERY" << std::endl;
       return query_->ProcessQuery(std::move(context), std::move(request));
     case Request::TYPE_REPLICA_STATE:
-      std::cout << "TYPE REPLICA STATE" << std::endl;
       return query_->ProcessGetReplicaState(std::move(context),
                                             std::move(request));
     case Request::TYPE_CUSTOM_QUERY:
-      std::cout << "TYPE CUSTOM QUERY" << std::endl;
       return query_->ProcessCustomQuery(std::move(context), std::move(request));
     case Request::TYPE_RECOVERY_DATA:
-      std::cout << "TYPE RECOVERY DATA" << std::endl;
       return ProcessRecoveryData(std::move(context), std::move(request));
     case Request::TYPE_RECOVERY_DATA_RESP:
-      std::cout << "TYPE RECOVERY DATA RESP" << std::endl;
       return ProcessRecoveryDataResponse(std::move(context),
                                          std::move(request));
   }
@@ -395,6 +393,8 @@ void ConsensusManager2PC::RemoteRecoveryProcess() {
     }
   }
 }
+
+
 }// namespace 2pc 
 
 }  // namespace resdb

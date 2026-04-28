@@ -49,6 +49,15 @@ class Commitment {
   virtual int ProcessCommitMsg(std::unique_ptr<Context> context,
                                std::unique_ptr<Request> request);
 
+
+  /// @brief Intended for the primary only. Process a vote message, adding a message to the 
+  ///        vote count of this transaction. 
+  /// @param context 
+  /// @param request 
+  /// @return 
+  int ProcessVoteMsg(std::unique_ptr<Context> context,
+                             std::unique_ptr<Request> request);
+
   void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
   void SetNeedCommitQC(bool need_qc);
 

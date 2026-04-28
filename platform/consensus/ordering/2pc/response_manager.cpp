@@ -116,8 +116,6 @@ int ResponseManager::NewUserRequest(std::unique_ptr<Context> context,
 }
 
 // =================== response ========================
-// handle the response message. If receive f+1 commit messages, send back to the
-// caller.
 int ResponseManager::ProcessResponseMsg(std::unique_ptr<Context> context,
                                         std::unique_ptr<Request> request) {
   std::unique_ptr<Request> response;
@@ -140,11 +138,12 @@ int ResponseManager::ProcessResponseMsg(std::unique_ptr<Context> context,
   if (ret == CollectorResultCode::STATE_CHANGED) {
     BatchUserResponse batch_response;
     if (batch_response.ParseFromString(response->data())) {
+      std::cout << "[2PC] ResponseManager::ProcessResponseMsg: Sending Response to client" << std::endl;
       SendResponseToClient(batch_response);
     } else {
       LOG(ERROR) << "parse response fail:";
     }
-  }
+  } 
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
@@ -152,14 +151,13 @@ bool ResponseManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status) {
   switch (type) {
     case Request::TYPE_RESPONSE:
-      // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
           config_.GetMinClientReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
             std::memory_order_acq_rel);
-      }
+      } 
       break;
   }
   return false;
@@ -170,6 +168,7 @@ CollectorResultCode ResponseManager::AddResponseMsg(
     std::function<void(const Request&,
                        const TransactionCollector::CollectorDataType*)>
         response_call_back) {
+      
   if (request == nullptr) {
     return CollectorResultCode::INVALID;
   }
@@ -245,6 +244,7 @@ void ResponseManager::SendResponseToClient(
     return;
   }
 
+
   for (size_t i = 0; i < context_list.size(); ++i) {
     auto& context = context_list[i];
     if (context->client == nullptr) {
@@ -254,7 +254,7 @@ void ResponseManager::SendResponseToClient(
     int ret = context->client->SendRawMessageData(batch_response.response(i));
     if (ret) {
       LOG(ERROR) << "send resp fail ret:" << ret;
-    }
+    } 
   }
 }
 

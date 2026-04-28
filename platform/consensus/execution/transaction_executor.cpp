@@ -145,6 +145,7 @@ bool TransactionExecutor::NeedResponse() {
 }
 
 int TransactionExecutor::Commit(std::unique_ptr<Request> message) {
+  std::cout << "[2PC] TransactionExecutor::Commit()" << std::endl;
   global_stats_->IncPendingExecute();
   if (transaction_manager_ && transaction_manager_->IsOutOfOrder()) {
     // LOG(ERROR)<<"add out of order exe:"<<message->seq()<<" from

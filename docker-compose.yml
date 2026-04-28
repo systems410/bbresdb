@@ -8,8 +8,8 @@ services:
       context: .
       dockerfile: Docker/Dockerfile
     volumes:
-      - .:/app
-      - ../.bazelcache:/root/.cache/bazel
+      - .:/app:z
+      - ../.bazelcache:/root/.cache/bazel:z
     cap_add:
       - SYS_PTRACE
     security_opt:

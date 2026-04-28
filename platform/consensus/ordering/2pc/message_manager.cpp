@@ -139,32 +139,18 @@ bool MessageManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status,
     bool ret) {
   switch (type) {
-    case Request::TYPE_PRE_PREPARE:
-      if (*status == TransactionStatue::None) {
+    case Request::TYPE_VOTE_COMMIT: 
+      if (config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
-        return status->compare_exchange_strong(
-            old_status, TransactionStatue::READY_PREPARE,
-            std::memory_order_acq_rel, std::memory_order_acq_rel);
-      }
-      break;
-    case Request::TYPE_PREPARE:
-      if (*status == TransactionStatue::READY_PREPARE &&
-          config_.GetMinDataReceiveNum() <= received_count) {
-        TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::READY_COMMIT,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }
       break;
+
     case Request::TYPE_COMMIT:
-      if (*status == TransactionStatue::READY_COMMIT &&
-          config_.GetMinDataReceiveNum() <= received_count) {
-        TransactionStatue old_status = TransactionStatue::READY_COMMIT;
-        return status->compare_exchange_strong(
-            old_status, TransactionStatue::READY_EXECUTE,
-            std::memory_order_acq_rel, std::memory_order_acq_rel);
-      }
-      break;
+      status->store(TransactionStatue::READY_EXECUTE, std::memory_order_acq_rel);
+      return true; 
   }
   return ret;
 }
@@ -192,7 +178,7 @@ CollectorResultCode MessageManager::AddConsensusMsg(
   }
 
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
-      std::move(request), signature, type == Request::TYPE_PRE_PREPARE,
+      std::move(request), signature, type == Request::TYPE_COMMIT,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           std::atomic<TransactionStatue>* status, bool force) {
@@ -207,11 +193,6 @@ CollectorResultCode MessageManager::AddConsensusMsg(
     return CollectorResultCode::INVALID;
   }
   if (resp_received_count > 0) {
-    if (type == Request::TYPE_COMMIT) {
-      if (checkpoint_manager_) {
-        checkpoint_manager_->AddCommitState(seq);
-      }
-    }
     return CollectorResultCode::STATE_CHANGED;
   }
   return CollectorResultCode::OK;
