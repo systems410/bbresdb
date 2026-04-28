@@ -145,6 +145,7 @@ bool TransactionExecutor::NeedResponse() {
 }
 
 int TransactionExecutor::Commit(std::unique_ptr<Request> message) {
+  std::cout << "[2PC] TransactionExecutor::Commit" << std::endl;
   global_stats_->IncPendingExecute();
   if (transaction_manager_ && transaction_manager_->IsOutOfOrder()) {
     // LOG(ERROR)<<"add out of order exe:"<<message->seq()<<" from
@@ -178,6 +179,7 @@ void TransactionExecutor::OrderMessage() {
   while (!IsStop()) {
     auto message = commit_queue_.Pop();
     if (message != nullptr) {
+      std::cout << "[2PC] Commit queue pop non null" << std::endl;
       global_stats_->IncExecute();
       uint64_t seq = message->seq();
       if (next_execute_seq_ > seq) {

@@ -140,11 +140,12 @@ int ResponseManager::ProcessResponseMsg(std::unique_ptr<Context> context,
   if (ret == CollectorResultCode::STATE_CHANGED) {
     BatchUserResponse batch_response;
     if (batch_response.ParseFromString(response->data())) {
+      std::cout << "[2PC] Sending Response to client" << std::endl;
       SendResponseToClient(batch_response);
     } else {
       LOG(ERROR) << "parse response fail:";
     }
-  }
+  } 
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
@@ -155,10 +156,13 @@ bool ResponseManager::MayConsensusChangeStatus(
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
           config_.GetMinClientReceiveNum() <= received_count) {
+        std::cout << "[2PC] Received f + 1 responses " << std::endl; 
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
             std::memory_order_acq_rel);
+      } else {
+        std::cout << "[2PC] Not enough responses: Received: " << received_count << " need: " << config_.GetMinClientReceiveNum() << std::endl;
       }
       break;
   }
@@ -170,6 +174,7 @@ CollectorResultCode ResponseManager::AddResponseMsg(
     std::function<void(const Request&,
                        const TransactionCollector::CollectorDataType*)>
         response_call_back) {
+      
   if (request == nullptr) {
     return CollectorResultCode::INVALID;
   }
@@ -179,6 +184,7 @@ CollectorResultCode ResponseManager::AddResponseMsg(
   std::unique_ptr<BatchUserResponse> batch_response =
       std::make_unique<BatchUserResponse>();
   if (!batch_response->ParseFromString(request->data())) {
+    std::cout << "[2PC] AddResponseMsg:: Parse fail!" << std::endl;
     LOG(ERROR) << "parse response fail:" << request->data().size()
                << " seq:" << request->seq();
     RemoveWaitingResponseRequest(hash);
@@ -189,8 +195,11 @@ CollectorResultCode ResponseManager::AddResponseMsg(
              << " type:" << request->type()
              << " local id:" << batch_response->local_id();
   uint64_t seq = batch_response->local_id();
+  std::cout << "[2PC] Setting seq to " << seq << " from " << request->seq() << std::endl;
   request->set_seq(seq);
+  // [2PC] THIS IS CAUSING PROBLEMS
   if (seq == 0) {
+    std::cout << "[2PC] AddResponseMsg:: Local id invalid!" << std::endl;
     LOG(ERROR) << " local id is invalid:" << seq
                << " request seq:" << request->seq()
                << " type:" << request->type();
@@ -199,6 +208,7 @@ CollectorResultCode ResponseManager::AddResponseMsg(
 
   int type = request->type();
   int resp_received_count = 0;
+  std::cout << "[2PC] Adding request to collector pool" << std::endl;
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
       std::move(request), signature, false,
       [&](const Request& request, int received_count,
@@ -232,8 +242,10 @@ void ResponseManager::SendResponseToClient(
     LOG(ERROR) << "seq:" << local_id << " no resp";
   }
   send_num_--;
+  std::cout << "[2PC] Past create time" << std::endl;
 
   if (config_.IsPerformanceRunning()) {
+    std::cout << "[2PC] Performance is running??" << std::endl;
     return;
   }
 
@@ -245,15 +257,20 @@ void ResponseManager::SendResponseToClient(
     return;
   }
 
+  std::cout << "[2PC] Past context list" << std::endl;
+
   for (size_t i = 0; i < context_list.size(); ++i) {
     auto& context = context_list[i];
     if (context->client == nullptr) {
       LOG(ERROR) << " no channel:";
       continue;
     }
+    std::cout << "[2PC] Past channel" << std::endl;
     int ret = context->client->SendRawMessageData(batch_response.response(i));
     if (ret) {
       LOG(ERROR) << "send resp fail ret:" << ret;
+    } else {
+      std::cout << "[2PC] Send raw message data" << std::endl;
     }
   }
 }
@@ -323,6 +340,7 @@ int ResponseManager::DoBatch(
     LOG(ERROR) << "add context list:" << new_request->seq()
                << " list size:" << context_list.size()
                << " local_id:" << local_id_;
+    std::cout << "[2PC] DoBatch: setting local id to " << local_id_ << std::endl;
     batch_request.set_local_id(local_id_);
     int ret = AddContextList(std::move(context_list), local_id_++);
     if (ret != 0) {

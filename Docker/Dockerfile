@@ -55,4 +55,6 @@ RUN bazel --version
 RUN bazel build @com_github_bazelbuild_buildtools//buildifier:buildifier
 RUN bazel build service/tools/kv/api_tools/kv_service_tools
 
+RUN chmod +x ./entrypoint.sh
+
 ENTRYPOINT ["./entrypoint.sh"]
