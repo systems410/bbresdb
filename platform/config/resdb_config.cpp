@@ -117,7 +117,8 @@ const ReplicaInfo& ResDBConfig::GetSelfInfo() const { return self_info_; }
 size_t ResDBConfig::GetReplicaNum() const { return replicas_.size(); }
 
 int ResDBConfig::GetMinDataReceiveNum() const {
-  return replicas_.size(); 
+  int f = (replicas_.size() - 1) / 3;
+  return std::max(f + 1, 1);
 }
 
 int ResDBConfig::GetMinClientReceiveNum() const {
