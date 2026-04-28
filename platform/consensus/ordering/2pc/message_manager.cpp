@@ -46,7 +46,6 @@ MessageManager::MessageManager(
               return;
             }
             resp_msg->set_proxy_id(request->proxy_id());
-            std::cout << "[2PC] Response msg sequence: " << request->seq() << std::endl;
             resp_msg->set_seq(request->seq());
             resp_msg->set_current_view(request->current_view());
             resp_msg->set_primary_id(GetCurrentPrimary());

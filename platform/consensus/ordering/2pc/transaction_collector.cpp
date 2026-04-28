@@ -168,12 +168,10 @@ int TransactionCollector::AddRequest(
   }
 
   if (request->type() == Request::TYPE_COMMIT) {
-    std::cout << "[2PC] Into the type commit if block" << std::endl;
     if (request->has_data_signature() &&
         request->data_signature().node_id() > 0) {
       std::lock_guard<std::mutex> lk(mutex_);
       LOG(ERROR) << "add qc signature";
-      std::cout << "[2PC] Pushing commit cert " << std::endl; 
       commit_certs_.push_back(request->data_signature());
     }
   }
@@ -189,7 +187,6 @@ int TransactionCollector::AddRequest(
   }
 
   if (status_.load() == TransactionStatue::READY_EXECUTE) {
-    std::cout << "[2PC] READY EXECUTE: Commit()" << std::endl;
     Commit();
     return 1;
   }

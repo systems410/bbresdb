@@ -261,8 +261,6 @@ int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
     return message_manager_->AddConsensusMsg(context->signature,
                                              std::move(request));
   }
-  // Add request to message_manager.
-  std::cout << "[2PC] Adding Consensus Message" << std::endl;
 
   std::unique_ptr<Request> global_decision = NewRequest(
       Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id() 
@@ -273,7 +271,8 @@ int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
     // We have received all the commits we need. broadcast the global descision 
-    global_decision->clear_data(); 
+    // Add request to message_manager.
+    std::cout << "[2PC] Commitment::ProcessVoteMsg: Broadcasting global decision" << std::endl;
     replica_communicator_->BroadCast(*global_decision);
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -315,7 +314,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   global_stats_->RecordStateTime("prepare");
 
   // Send the vote back to the coordinator 
-  std::cout << "[2PC] SENDING COMMIT VOTE TO " << request->sender_id() << std::endl;
+  std::cout << "[2PC] Commitment::ProcessPrepareMSg: Sending vote to commit to " << request->sender_id() << std::endl;
   replica_communicator_->SendMessage(*commit_vote, request->sender_id());
 
   return 1; 
