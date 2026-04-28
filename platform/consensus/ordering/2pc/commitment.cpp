@@ -150,8 +150,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   return 0;
 }
 
-// Receive the pre-prepare message from the primary.
-// TODO check whether the sender is the primary.
 int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
   if (global_stats_->IsFaulty() || context == nullptr ||
@@ -248,6 +246,10 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
+int Commitment::ProcessCommitAckMsg(std::unique_ptr<Context> context, std::unique_ptr<Request> request) { 
+  return 0; 
+}
+
 int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
         
@@ -334,10 +336,18 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     return message_manager_->AddConsensusMsg(context->signature,
                                              std::move(request));
   }
+
+  int64_t sender = request->sender_id(); 
+
+  std::unique_ptr<Request> ack = NewRequest(Request::TYPE_COMMIT_ACK, 
+                                        *request, config_.GetSelfInfo().id());
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
+
   if (ret == CollectorResultCode::STATE_CHANGED) {
     global_stats_->RecordStateTime("commit");
+    std::cout << "[2PC] Commitment::ProcessCommitMsg: Sending commit ack message to " << sender << std::endl;
+    replica_communicator_->SendMessage(*ack, sender);
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }

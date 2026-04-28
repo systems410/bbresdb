@@ -268,6 +268,11 @@ int ConsensusManager2PC::InternalConsensusCommit(
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
 
+    case Request::TYPE_COMMIT_ACK: 
+      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received commit ack message" << std::endl;
+      return commitment_->ProcessCommitAckMsg(std::move(context), 
+                                              std::move(request));
+
     // Other 
     case Request::TYPE_CHECKPOINT:
       return checkpoint_manager_->ProcessCheckPoint(std::move(context),

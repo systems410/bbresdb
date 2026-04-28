@@ -58,6 +58,8 @@ class Commitment {
   int ProcessVoteMsg(std::unique_ptr<Context> context,
                              std::unique_ptr<Request> request);
 
+  int ProcessCommitAckMsg(std::unique_ptr<Context> context, std::unique_ptr<Request> request);
+
   void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
   void SetNeedCommitQC(bool need_qc);
 

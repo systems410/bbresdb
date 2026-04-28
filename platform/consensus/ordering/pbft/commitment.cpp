@@ -317,6 +317,7 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     // LOG(ERROR)<<request->data().size();
     // global_stats_->GetTransactionDetails(request->data());
     global_stats_->RecordStateTime("commit");
+    // ACK the commit to the coordinator 
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
