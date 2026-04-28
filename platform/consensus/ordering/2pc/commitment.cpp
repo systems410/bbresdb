@@ -81,10 +81,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   }
 
   if (config_.GetSelfInfo().id() != message_manager_->GetCurrentPrimary()) {
-    // LOG(ERROR) << "current node is not primary. primary:"
-    //            << message_manager_->GetCurrentPrimary()
-    //            << " seq:" << user_request->seq()
-    //            << " hash:" << user_request->hash();
     LOG(INFO) << "NOT PRIMARY, Primary is "
               << message_manager_->GetCurrentPrimary();
     replica_communicator_->SendMessage(*user_request,
@@ -137,6 +133,14 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   }
 
   global_stats_->RecordStateTime("request");
+  auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id());
+  req_cpy->set_current_view(message_manager_->GetCurrentView());
+  req_cpy->set_seq(*seq);
+
+  CollectorResultCode ret = message_manager_->AddConsensusMsg(context->signature, std::move(req_cpy));
+  if (ret == CollectorResultCode::INVALID) { 
+    return -2; 
+  }
 
   user_request->set_type(Request::TYPE_PREPARE);
   user_request->set_current_view(message_manager_->GetCurrentView());
@@ -300,9 +304,16 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     return ret;
   }
 
+  int64_t sender = request->sender_id(); 
+
   std::unique_ptr<Request> commit_vote = NewRequest(
       Request::TYPE_VOTE_COMMIT, *request, config_.GetSelfInfo().id());
-    
+
+  CollectorResultCode ret = message_manager_->AddConsensusMsg(context->signature, std::move(request));
+  if (ret == CollectorResultCode::INVALID) { 
+    return ret; 
+  }
+
   commit_vote->mutable_data_signature()->Clear();
   // If need qc, sign the data
   if (need_qc_ && verifier_) {
@@ -317,8 +328,8 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   global_stats_->RecordStateTime("prepare");
 
   // Send the vote back to the coordinator 
-  std::cout << "[2PC] Commitment::ProcessPrepareMSg: Sending vote to commit to " << request->sender_id() << std::endl;
-  replica_communicator_->SendMessage(*commit_vote, request->sender_id());
+  std::cout << "[2PC] Commitment::ProcessPrepareMSg: Sending vote to commit to " << sender << std::endl;
+  replica_communicator_->SendMessage(*commit_vote, sender);
 
   return 1; 
 

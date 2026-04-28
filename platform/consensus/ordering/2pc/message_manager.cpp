@@ -139,18 +139,52 @@ bool MessageManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status,
     bool ret) {
   switch (type) {
-    case Request::TYPE_VOTE_COMMIT: 
-      if (config_.GetMinDataReceiveNum() <= received_count) {
+    // Have the participant switch directly to ready commit on the prepare msg as we assume no aborts 
+    case Request::TYPE_PREPARE: 
+      // the coordinator may also be a participant, so dont let them switch to ready commit until they have enough votes
+      if (config_.GetSelfInfo().id() != GetCurrentPrimary() && *status == TransactionStatue::None) { 
         TransactionStatue old_status = TransactionStatue::None;
+        return status->compare_exchange_strong(
+            old_status, TransactionStatue::READY_COMMIT,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+      }
+      break; 
+    // Have the coordinator enter a READY PREPARE state on new txns 
+    case Request::TYPE_NEW_TXNS: 
+      if (*status == TransactionStatue::None) { 
+        TransactionStatue old_status = TransactionStatue::None;
+        auto x = status->compare_exchange_strong(
+            old_status, TransactionStatue::READY_PREPARE,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+        
+      }  
+      break; 
+
+    // Received a COMMIT VOTE, if we have received votes for all replicas, 
+    // transition into READY COMMIT state  
+    case Request::TYPE_VOTE_COMMIT: 
+      if (*status != TransactionStatue::READY_PREPARE) { 
+      }
+      if (config_.GetReplicaNum() > received_count) { 
+      }
+
+      if (*status == TransactionStatue::READY_PREPARE && config_.GetReplicaNum() <= received_count) {
+        TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::READY_COMMIT,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }
       break;
 
+    // Received global decision to commit. If ready to commit, transition to READY EXECUTE 
     case Request::TYPE_COMMIT:
-      status->store(TransactionStatue::READY_EXECUTE, std::memory_order_acq_rel);
-      return true; 
+      if (*status == TransactionStatue::READY_COMMIT) { 
+        TransactionStatue old_status = TransactionStatue::READY_COMMIT;
+        return status->compare_exchange_strong(
+            old_status, TransactionStatue::READY_EXECUTE,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+      }
+      break; 
   }
   return ret;
 }
