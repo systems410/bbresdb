@@ -60,8 +60,10 @@ message Request {
         TYPE_STATUS_SYNC = 20;
         TYPE_VOTE_COMMIT = 21; 
         TYPE_VOTE_ABORT = 22;
+        TYPE_COMMIT_ACK = 23;
+        TYPE_ABORT_ACK = 24;
 
-        NUM_OF_TYPE = 23; // the total number of types.
+        NUM_OF_TYPE = 25; // the total number of types.
                        // Used to create the collector.
     };
     int32 type = 1;
