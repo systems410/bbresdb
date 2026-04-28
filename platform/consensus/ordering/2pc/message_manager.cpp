@@ -153,21 +153,15 @@ bool MessageManager::MayConsensusChangeStatus(
     case Request::TYPE_NEW_TXNS: 
       if (*status == TransactionStatue::None) { 
         TransactionStatue old_status = TransactionStatue::None;
-        auto x = status->compare_exchange_strong(
+        return status->compare_exchange_strong(
             old_status, TransactionStatue::READY_PREPARE,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
-        
       }  
       break; 
 
     // Received a COMMIT VOTE, if we have received votes for all replicas, 
     // transition into READY COMMIT state  
     case Request::TYPE_VOTE_COMMIT: 
-      if (*status != TransactionStatue::READY_PREPARE) { 
-      }
-      if (config_.GetReplicaNum() > received_count) { 
-      }
-
       if (*status == TransactionStatue::READY_PREPARE && config_.GetReplicaNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
