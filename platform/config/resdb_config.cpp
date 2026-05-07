@@ -23,11 +23,25 @@
 
 namespace resdb {
 
+void ResDBConfig::CalculateNumShards(const std::vector<ReplicaInfo>& replicas)
+{
+  std::set<uint32_t> shard_ids; 
+  for (const auto& replica : replicas) {
+    // do not include the client 
+    if (replica.shard_id() != 0) {
+      shard_ids.insert(replica.shard_id());
+      shard_counts_[replica.shard_id()]++; 
+    }
+  }
+  num_shards_ = shard_ids.size(); 
+}
+
 ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
                          const ReplicaInfo& self_info,
                          ResConfigData config_data)
     : ResDBConfig(config_data, self_info, KeyInfo(), CertificateInfo()) {
   replicas_ = replicas;
+  CalculateNumShards(replicas_);
 }
 
 ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
@@ -37,6 +51,7 @@ ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
     : ResDBConfig(ResConfigData(), self_info, private_key,
                   public_key_cert_info) {
   replicas_ = replicas;
+  CalculateNumShards(replicas_);
 }
 
 ResDBConfig::ResDBConfig(const ResConfigData& config_data,
@@ -79,6 +94,7 @@ ResDBConfig::ResDBConfig(const ResConfigData& config_data,
   if (config_data_.max_process_txn() == 0) {
     config_data_.set_max_process_txn(64);
   }
+  CalculateNumShards(replicas_);
 }
 
 void ResDBConfig::SetConfigData(const ResConfigData& config_data) {
@@ -99,6 +115,16 @@ void ResDBConfig::SetConfigData(const ResConfigData& config_data) {
     config_data_.set_view_change_timeout_ms(viewchange_commit_timeout_ms_);
   }
 }
+
+uint32_t ResDBConfig::GetNumShards() const { return num_shards_; } 
+
+uint32_t ResDBConfig::GetNumReplicasInShard(uint32_t shard_id) const { 
+  auto it = shard_counts_.find(shard_id);
+  if (it == shard_counts_.end()) { 
+    return 0; 
+  }
+  return it->second; 
+};
 
 KeyInfo ResDBConfig::GetPrivateKey() const { return private_key_; }
 

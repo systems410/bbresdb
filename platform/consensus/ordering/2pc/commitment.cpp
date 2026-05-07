@@ -67,6 +67,7 @@ void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 // Send a prepare request to each replica 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> user_request) {
+  std::cout << "[SHARD] Num shards: " << config_.GetNumShards() << "Total in shard 1: " << config_.GetNumReplicasInShard(1) << std::endl;
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;

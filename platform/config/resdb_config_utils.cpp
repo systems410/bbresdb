@@ -85,11 +85,12 @@ CertificateInfo ReadCert(const std::string& file_name) {
 
 }  // namespace
 
-ReplicaInfo GenerateReplicaInfo(int id, const std::string& ip, int port) {
+ReplicaInfo GenerateReplicaInfo(int id, const std::string& ip, int port, int shard_id) {
   ReplicaInfo info;
   info.set_id(id);
   info.set_ip(ip);
   info.set_port(port);
+  info.set_shard_id(shard_id);
   return info;
 }
 
@@ -147,7 +148,7 @@ std::vector<ReplicaInfo> ReadConfig(const std::string& file_name) {
                << " ip:" << replica_info.ip()
                << " port:" << replica_info.port();
     replicas.push_back(GenerateReplicaInfo(replica_info.id(), replica_info.ip(),
-                                           replica_info.port()));
+                                           replica_info.port(), replica_info.shard_id()));
   }
   return replicas;
 }
@@ -169,6 +170,7 @@ std::unique_ptr<ResDBConfig> GenerateResDBConfig(
   (*self_info).set_id(cert_info.public_key().public_key_info().node_id());
   (*self_info).set_ip(cert_info.public_key().public_key_info().ip());
   (*self_info).set_port(cert_info.public_key().public_key_info().port());
+  (*self_info).set_shard_id(cert_info.public_key().public_key_info().shard_id());
 
   *(*self_info).mutable_certificate_info() = cert_info;
 

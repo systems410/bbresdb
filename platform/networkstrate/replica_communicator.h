@@ -48,7 +48,16 @@ class ReplicaCommunicator {
   virtual int SendMessage(const google::protobuf::Message& message,
                           const ReplicaInfo& replica_info);
 
+
+  virtual void SendMessages(const google::protobuf::Message&, const std::vector<ReplicaInfo>& replicas);
+
   virtual void BroadCast(const google::protobuf::Message& message);
+
+  virtual void SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id);
+
+  // Sends to all but self
+  virtual void SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id, const ReplicaInfo& self);
+
   virtual void SendMessage(const google::protobuf::Message& message,
                            int64_t node_id);
   virtual int SendBatchMessage(
@@ -59,6 +68,7 @@ class ReplicaCommunicator {
   std::vector<ReplicaInfo> GetClientReplicas();
 
  protected:
+
   virtual std::unique_ptr<NetChannel> GetClient(const std::string& ip,
                                                 int port);
   virtual AsyncReplicaClient* GetClientFromPool(const std::string& ip,

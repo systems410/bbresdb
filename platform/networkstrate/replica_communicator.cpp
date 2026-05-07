@@ -298,11 +298,49 @@ std::unique_ptr<NetChannel> ReplicaCommunicator::GetClient(
   return std::make_unique<NetChannel>(ip, port);
 }
 
+
 void ReplicaCommunicator::BroadCast(const google::protobuf::Message& message) {
   int ret = SendMessage(message);
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";
   }
+}
+void ReplicaCommunicator::SendMessages(const google::protobuf::Message& message, const std::vector<ReplicaInfo>& replicas)
+{
+  for (const auto& target_replica : replicas)
+  {
+    if (target_replica.ip().empty()) {
+      LOG(ERROR) << "no replica info";
+      return;
+    }
+
+    int ret = SendMessage(message, target_replica);
+    if (ret < 0) {
+      LOG(ERROR) << "broadcast request fail:";
+    }
+  }
+}
+
+void ReplicaCommunicator::SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id)
+{
+  std::vector<ReplicaInfo> targets; 
+  for (const auto& replica : replicas_) {
+    if (replica.shard_id() == shard_id) {
+      targets.push_back(replica);
+    }
+  }
+  SendMessages(message, targets);
+}
+
+void ReplicaCommunicator::SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id, const ReplicaInfo& self)
+{
+  std::vector<ReplicaInfo> targets; 
+  for (const auto& replica : replicas_) {
+    if (replica.shard_id() == shard_id && replica.id() != self.id()) {
+      targets.push_back(replica);
+    }
+  }
+  SendMessages(message, targets);
 }
 
 void ReplicaCommunicator::SendMessage(const google::protobuf::Message& message,

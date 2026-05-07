@@ -29,6 +29,7 @@ message ReplicaInfo {
     optional string ip = 2;
     optional int32 port = 3;
     optional CertificateInfo certificate_info = 4; // include the private/public key, public key of admin and the certificate published by admin.
+    optional uint32 shard_id = 5; 
 }
 
 message RegionInfo {

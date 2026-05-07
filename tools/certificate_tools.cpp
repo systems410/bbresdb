@@ -79,11 +79,12 @@ int main(int argc, char** argv) {
   std::string ip;
   std::string type;
   int port = 0;
+  int shard_id = 0; 
   int64_t node_id = 0;
   if (argc < 9) {
     printf(
         "<save path> <administor private key path> <adminisotr public key "
-        "path> <node public key path> <node id> <ip> <port> "
+        "path> <node public key path> <node id> <ip> <port> <shard_id>"
         "<type>(client/server)\n");
     exit(0);
   } else {
@@ -94,7 +95,8 @@ int main(int argc, char** argv) {
     node_id = strtoull(argv[5], NULL, 10);
     ip = argv[6];
     port = strtoull(argv[7], NULL, 10);
-    type = argv[8];
+    shard_id = strtoull(argv[8], NULL, 10);
+    type = argv[9];
   }
   // Read the keys of current node.
   KeyInfo pub_key = ReadKey(node_pub_key_path);
@@ -118,6 +120,7 @@ int main(int argc, char** argv) {
   }
   info.mutable_public_key()->mutable_public_key_info()->set_ip(ip);
   info.mutable_public_key()->mutable_public_key_info()->set_port(port);
+  info.mutable_public_key()->mutable_public_key_info()->set_shard_id(shard_id);
 
   info.set_node_id(node_id);
 

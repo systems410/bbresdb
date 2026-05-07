@@ -121,9 +121,18 @@ class ResDBConfig {
   uint32_t GetViewchangeCommitTimeout() const;
   void SetViewchangeCommitTimeout(uint64_t timeout_ms);
 
+  uint32_t GetNumShards() const; 
+  uint32_t GetNumReplicasInShard(uint32_t shard_id) const;
+
  private:
+  void CalculateNumShards(const std::vector<ReplicaInfo>& replicas);
+
   ResConfigData config_data_;
   std::vector<ReplicaInfo> replicas_;
+
+  uint32_t num_shards_ = 0; 
+  std::unordered_map<uint32_t, uint32_t> shard_counts_; 
+
   ReplicaInfo self_info_;
   const KeyInfo private_key_;
   const CertificateInfo public_key_cert_info_;
