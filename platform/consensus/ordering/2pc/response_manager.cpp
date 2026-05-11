@@ -153,7 +153,8 @@ bool ResponseManager::MayConsensusChangeStatus(
   switch (type) {
     case Request::TYPE_RESPONSE:
       if (*status == TransactionStatue::None &&
-        // SHARD TODO  --- who sent the request to determine what shards minimum here. 
+        // SHARD TODO  --- Need to determine the minimum here? should it just be a fixed numbers since we assume 4x4? Or figure out what shards are involved. 
+        // Right now it just uses the size of shard 1
           config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
@@ -205,8 +206,6 @@ CollectorResultCode ResponseManager::AddResponseMsg(
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           std::atomic<TransactionStatue>* status, bool force) {
-            // SHARD TODO --->  maybe calculate the minimum needed here or something... not too sure. because we need 
-            // to know what shards are involved in this message to know how many responses we need from each shard.  
         if (MayConsensusChangeStatus(type, received_count, status)) {
           resp_received_count = 1;
           response_call_back(request, data);
@@ -349,6 +348,7 @@ int ResponseManager::DoBatch(
   batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
+  // SHARD TODO: Need to rotate what shard to send this to! 
   replica_communicator_->SendMessage(*new_request, GetPrimary());
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimary()
