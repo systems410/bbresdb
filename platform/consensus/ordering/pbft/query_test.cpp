@@ -76,6 +76,7 @@ class QueryTest : public Test {
     request.set_seq(1);
     request.set_type(Request::TYPE_PRE_PREPARE);
     request.set_sender_id(sender_id);
+    request.set_sender_shard_id(1);
     request.set_need_response(need_resp);
     request.set_proxy_id(proxy_id);
 
@@ -92,6 +93,7 @@ class QueryTest : public Test {
     request.set_seq(1);
     request.set_type(Request::TYPE_PREPARE);
     request.set_sender_id(sender_id);
+    request.set_sender_shard_id(1);
     return commitment_.ProcessPrepareMsg(std::move(context),
                                          std::make_unique<Request>(request));
   }
@@ -105,6 +107,7 @@ class QueryTest : public Test {
     request.set_seq(1);
     request.set_type(Request::TYPE_COMMIT);
     request.set_sender_id(sender_id);
+    request.set_sender_shard_id(1);
     return commitment_.ProcessCommitMsg(std::move(context),
                                         std::make_unique<Request>(request));
   }

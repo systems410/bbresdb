@@ -108,7 +108,7 @@ TEST_F(ViewChangeManagerTest, SendNewView) {
   for (int i = 0; i < 3; ++i) {
     ViewChangeMessage viewchange_message;
     std::unique_ptr<Request> request =
-        NewRequest(Request::TYPE_VIEWCHANGE, Request(), i + 1);
+        NewRequest(Request::TYPE_VIEWCHANGE, Request(), i + 1, 1);
     viewchange_message.set_view_number(3);
     viewchange_message.SerializeToString(request->mutable_data());
 

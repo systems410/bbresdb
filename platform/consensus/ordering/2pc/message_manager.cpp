@@ -162,7 +162,7 @@ bool MessageManager::MayConsensusChangeStatus(
     // Received a COMMIT VOTE, if we have received votes for all replicas, 
     // transition into READY COMMIT state  
     case Request::TYPE_VOTE_COMMIT: 
-      if (*status == TransactionStatue::READY_PREPARE && config_.GetReplicaNum() <= received_count) {
+      if (*status == TransactionStatue::READY_PREPARE && config_.GetReplicaNumInSelfShard() <= received_count) {
         TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::READY_COMMIT,

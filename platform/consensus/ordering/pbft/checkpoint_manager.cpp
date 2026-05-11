@@ -173,7 +173,7 @@ void CheckPointManager::CheckHealthy() {
 
   std::map<uint64_t, int> seqs;
 
-  for (int i = 1; i <= config_.GetReplicaNum(); ++i) {
+  for (int i = 1; i <= config_.GetReplicaNumInSelfShard(); ++i) {
     if (last_update_time_.find(i) == last_update_time_.end() ||
         last_update_time_[i] == 0) {
       continue;
@@ -367,12 +367,12 @@ void CheckPointManager::SyncStatus() {
 
     CheckPointData checkpoint_data;
     std::unique_ptr<Request> checkpoint_request = NewRequest(
-        Request::TYPE_STATUS_SYNC, Request(), config_.GetSelfInfo().id());
+        Request::TYPE_STATUS_SYNC, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
     checkpoint_data.set_seq(last_seq);
     checkpoint_data.set_view(sys_info_->GetCurrentView());
     checkpoint_data.set_primary_id(sys_info_->GetPrimaryId());
     checkpoint_data.SerializeToString(checkpoint_request->mutable_data());
-    replica_communicator_->BroadCast(*checkpoint_request);
+    replica_communicator_->SendMessageToShard(*checkpoint_request, config_.GetSelfShard());
 
     LOG(ERROR) << " sync status last seq:" << last_seq
                << " last time:" << last_time
@@ -452,7 +452,7 @@ void CheckPointManager::BroadcastCheckPoint(
     const std::vector<uint64_t>& stable_seqs) {
   CheckPointData checkpoint_data;
   std::unique_ptr<Request> checkpoint_request = NewRequest(
-      Request::TYPE_CHECKPOINT, Request(), config_.GetSelfInfo().id());
+      Request::TYPE_CHECKPOINT, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
   checkpoint_data.set_seq(seq);
   checkpoint_data.set_hash(hash);
   if (verifier_) {
@@ -465,19 +465,19 @@ void CheckPointManager::BroadcastCheckPoint(
   }
 
   checkpoint_data.SerializeToString(checkpoint_request->mutable_data());
-  replica_communicator_->BroadCast(*checkpoint_request);
+  replica_communicator_->SendMessageToShard(*checkpoint_request, config_.GetSelfShard());
 }
 
 void CheckPointManager::BroadcastRecovery(uint64_t min_seq, uint64_t max_seq) {
   RecoveryRequest recovery_data;
   std::unique_ptr<Request> recovery_request = NewRequest(
-      Request::TYPE_RECOVERY_DATA, Request(), config_.GetSelfInfo().id());
+      Request::TYPE_RECOVERY_DATA, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
   recovery_data.set_min_seq(min_seq);
   recovery_data.set_max_seq(max_seq);
   recovery_data.SerializeToString(recovery_request->mutable_data());
 
   LOG(ERROR) << " recovery request [" << min_seq << "," << max_seq << "]";
-  replica_communicator_->BroadCast(*recovery_request);
+  replica_communicator_->SendMessageToShard(*recovery_request, config_.GetSelfShard());
 }
 
 void CheckPointManager::WaitSignal() {

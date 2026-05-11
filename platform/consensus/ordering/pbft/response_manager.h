@@ -75,6 +75,7 @@ class ResponseManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
+  uint32_t GetPrimaryOfShard(uint32_t shard_id); 
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
   void RemoveWaitingResponseRequest(const std::string& hash);

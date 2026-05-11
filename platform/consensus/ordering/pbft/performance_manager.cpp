@@ -72,7 +72,7 @@ PerformanceManager::PerformanceManager(
   checking_timeout_thread_ =
       std::thread(&PerformanceManager::MonitoringClientTimeOut, this);
   global_stats_ = Stats::GetGlobalStats();
-  for (size_t i = 0; i <= config_.GetReplicaNum(); i++) {
+  for (size_t i = 0; i <= config_.GetReplicaNum(config_.GetSelfShard()); i++) {
     send_num_.push_back(0);
   }
   total_num_ = 0;
@@ -173,7 +173,8 @@ bool PerformanceManager::MayConsensusChangeStatus(
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
-          config_.GetMinClientReceiveNum() <= received_count) {
+        // SHARD TODO
+          config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
@@ -295,7 +296,7 @@ int PerformanceManager::BatchProposeMsg() {
 int PerformanceManager::DoBatch(
     const std::vector<std::unique_ptr<QueueItem>>& batch_req) {
   auto new_request =
-      NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id());
+      NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
   if (new_request == nullptr) {
     return -2;
   }
@@ -402,7 +403,7 @@ void PerformanceManager::MonitoringClientTimeOut() {
     if (CheckTimeOut(client_timeout.hash)) {
       auto request = GetTimeOutRequest(client_timeout.hash);
       if (request) {
-        replica_communicator_->BroadCast(*request);
+        replica_communicator_->SendMessageToShard(*request, config_.GetSelfShard());
       }
     }
   }

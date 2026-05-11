@@ -67,7 +67,6 @@ void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 // Send a prepare request to each replica 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> user_request) {
-  std::cout << "[SHARD] Num shards: " << config_.GetNumShards() << "Total in shard 1: " << config_.GetNumReplicasInShard(1) << std::endl;
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
@@ -125,6 +124,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     Request request;
     request.set_type(Request::TYPE_RESPONSE);
     request.set_sender_id(config_.GetSelfInfo().id());
+    request.set_sender_shard_id(config_.GetSelfShard());
     request.set_proxy_id(user_request->proxy_id());
     request.set_ret(-2);
     request.set_hash(user_request->hash());
@@ -147,6 +147,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_current_view(message_manager_->GetCurrentView());
   user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
+  user_request->set_sender_shard_id(config_.GetSelfShard()); 
   user_request->set_primary_id(config_.GetSelfInfo().id());
 
   std::cout << "[2PC] Commitment::ProcessNewRequest: Broadcasting prepare message" << std::endl;
@@ -378,6 +379,7 @@ int Commitment::PostProcessExecutedMsg() {
     request.set_seq(batch_resp->seq());
     request.set_type(Request::TYPE_RESPONSE);
     request.set_sender_id(config_.GetSelfInfo().id());
+    request.set_sender_shard_id(config_.GetSelfShard());
     request.set_current_view(batch_resp->current_view());
     request.set_proxy_id(batch_resp->proxy_id());
     request.set_primary_id(batch_resp->primary_id());

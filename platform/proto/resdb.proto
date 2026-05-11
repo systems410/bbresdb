@@ -95,6 +95,7 @@ message Request {
     int64 commit_time = 25;
     bytes data_hash = 26;
     bool force_recovery =27;
+    uint32 sender_shard_id = 28;
 
 }
 

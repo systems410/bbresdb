@@ -175,7 +175,7 @@ void CheckPointManager::CheckHealthy() {
 
   std::map<uint64_t, int> seqs;
 
-  for (int i = 1; i <= config_.GetReplicaNum(); ++i) {
+  for (int i = 1; i <= config_.GetReplicaNum(config_.GetSelfShard()); ++i) {
     if (last_update_time_.find(i) == last_update_time_.end() ||
         last_update_time_[i] == 0) {
       continue;

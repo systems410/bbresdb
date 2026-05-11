@@ -46,7 +46,7 @@ ConsensusManager::ConsensusManager(const ResDBConfig& config)
     verifier_ = std::make_unique<SignatureVerifier>(
         config_.GetPrivateKey(), config_.GetPublicKeyCertificateInfo());
   }
-  bc_client_ = GetReplicaClient(config_.GetReplicaInfos(), true);
+  bc_client_ = GetReplicaClient(config_.GetAllReplicas(), true);
 }
 
 ConsensusManager::~ConsensusManager() {

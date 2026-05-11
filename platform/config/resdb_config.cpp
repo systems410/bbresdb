@@ -23,25 +23,19 @@
 
 namespace resdb {
 
-void ResDBConfig::CalculateNumShards(const std::vector<ReplicaInfo>& replicas)
-{
-  std::set<uint32_t> shard_ids; 
+void ResDBConfig::InitShards(const std::vector<ReplicaInfo>& replicas) {
   for (const auto& replica : replicas) {
-    // do not include the client 
     if (replica.shard_id() != 0) {
-      shard_ids.insert(replica.shard_id());
-      shard_counts_[replica.shard_id()]++; 
+      shard_ids_.insert(replica.shard_id());
     }
+    shards_[replica.shard_id()].push_back(replica);
   }
-  num_shards_ = shard_ids.size(); 
 }
 
 ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
                          const ReplicaInfo& self_info,
                          ResConfigData config_data)
     : ResDBConfig(config_data, self_info, KeyInfo(), CertificateInfo()) {
-  replicas_ = replicas;
-  CalculateNumShards(replicas_);
 }
 
 ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
@@ -50,8 +44,6 @@ ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
                          const CertificateInfo& public_key_cert_info)
     : ResDBConfig(ResConfigData(), self_info, private_key,
                   public_key_cert_info) {
-  replicas_ = replicas;
-  CalculateNumShards(replicas_);
 }
 
 ResDBConfig::ResDBConfig(const ResConfigData& config_data,
@@ -66,7 +58,7 @@ ResDBConfig::ResDBConfig(const ResConfigData& config_data,
     if (region.region_id() == config_data.self_region_id()) {
       LOG(INFO) << "get region info:" << region.DebugString();
       for (const auto& replica : region.replica_info()) {
-        replicas_.push_back(replica);
+        all_replicas_.push_back(replica);
       }
       LOG(INFO) << "get region config server size:"
                 << region.replica_info_size();
@@ -94,17 +86,22 @@ ResDBConfig::ResDBConfig(const ResConfigData& config_data,
   if (config_data_.max_process_txn() == 0) {
     config_data_.set_max_process_txn(64);
   }
-  CalculateNumShards(replicas_);
+  InitShards(all_replicas_);
+}
+
+const std::vector<ReplicaInfo>& ResDBConfig::GetAllReplicas() const {
+  return all_replicas_;
 }
 
 void ResDBConfig::SetConfigData(const ResConfigData& config_data) {
   config_data_ = config_data;
-  replicas_.clear();
+  shards_.clear();
+  std::vector<ReplicaInfo> replicas; 
   for (const auto& region : config_data.region()) {
     if (region.region_id() == config_data.self_region_id()) {
       LOG(INFO) << "get region info:" << region.DebugString();
       for (const auto& replica : region.replica_info()) {
-        replicas_.push_back(replica);
+        replicas.push_back(replica);
       }
       LOG(INFO) << "get region config server size:"
                 << region.replica_info_size();
@@ -114,17 +111,13 @@ void ResDBConfig::SetConfigData(const ResConfigData& config_data) {
   if (config_data_.view_change_timeout_ms() == 0) {
     config_data_.set_view_change_timeout_ms(viewchange_commit_timeout_ms_);
   }
+  InitShards(replicas);
 }
 
-uint32_t ResDBConfig::GetNumShards() const { return num_shards_; } 
+uint32_t ResDBConfig::GetNumShards() const { 
+  return shard_ids_.size(); 
+} 
 
-uint32_t ResDBConfig::GetNumReplicasInShard(uint32_t shard_id) const { 
-  auto it = shard_counts_.find(shard_id);
-  if (it == shard_counts_.end()) { 
-    return 0; 
-  }
-  return it->second; 
-};
 
 KeyInfo ResDBConfig::GetPrivateKey() const { return private_key_; }
 
@@ -134,31 +127,53 @@ CertificateInfo ResDBConfig::GetPublicKeyCertificateInfo() const {
 
 ResConfigData ResDBConfig::GetConfigData() const { return config_data_; }
 
-const std::vector<ReplicaInfo>& ResDBConfig::GetReplicaInfos() const {
-  return replicas_;
+const std::vector<ReplicaInfo>& ResDBConfig::GetReplicaInfos(uint32_t shard_id) const {
+  static std::vector<ReplicaInfo> none = { };
+  auto it = shards_.find(shard_id);
+  if (it == shards_.end()) {
+    return none; 
+  }
+  return it->second; 
+}
+
+
+size_t ResDBConfig::GetReplicaNumInSelfShard() const { 
+  return GetReplicaNum(self_info_.shard_id());
+}
+
+
+uint32_t ResDBConfig::GetSelfShard() const { 
+  return self_info_.shard_id(); 
 }
 
 const ReplicaInfo& ResDBConfig::GetSelfInfo() const { return self_info_; }
 
-size_t ResDBConfig::GetReplicaNum() const { return replicas_.size(); }
+size_t ResDBConfig::GetReplicaNum(uint32_t shard_id) const 
+{ 
+  auto it = shards_.find(shard_id);
+  if (it == shards_.end()) {
+    return 0; 
+  }
+  return it->second.size(); 
+}
 
 int ResDBConfig::GetMinDataReceiveNum() const {
-  int f = (replicas_.size() - 1) / 3;
+  int f = (GetReplicaNumInSelfShard()) / 3;
   return std::max(2 * f + 1, 1);
 }
 
-int ResDBConfig::GetMinClientReceiveNum() const {
-  int f = (replicas_.size() - 1) / 3;
+int ResDBConfig::GetMinClientReceiveNum(uint32_t shard_num) const {
+  int f = (GetReplicaNum(shard_num) - 1) / 3;
   return std::max(f + 1, 1);
 }
 
 int ResDBConfig::GetMinCheckpointReceiveNum() const {
-  int f = (replicas_.size() - 1) / 3;
+  int f = (GetReplicaNumInSelfShard() - 1) / 3;
   return std::max(f + 1, 1);
 }
 
 size_t ResDBConfig::GetMaxMaliciousReplicaNum() const {
-  int f = (replicas_.size() - 1) / 3;
+  int f = (GetReplicaNumInSelfShard() - 1) / 3;
   return std::max(f, 0);
 }
 
@@ -187,6 +202,10 @@ void ResDBConfig::SetCheckPointWaterMark(int water_mark) {
 
 void ResDBConfig::EnableCheckPoint(bool is_enable) {
   is_enable_checkpoint_ = is_enable;
+}
+
+const std::set<uint32_t>& ResDBConfig::GetShardIds() const { 
+  return shard_ids_; 
 }
 
 bool ResDBConfig::IsCheckPointEnabled() { return is_enable_checkpoint_; }
@@ -263,6 +282,10 @@ uint32_t ResDBConfig::GetInputWorkerNum() const {
 
 uint32_t ResDBConfig::GetOutputWorkerNum() const {
   return config_data_.output_worker_num();
+}
+
+const std::vector<ReplicaInfo> ResDBConfig::GetClientInfos() const { 
+  return GetReplicaInfos(0);
 }
 
 uint32_t ResDBConfig::GetTcpBatchNum() const {

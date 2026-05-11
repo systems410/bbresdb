@@ -25,9 +25,9 @@
 namespace resdb {
 
 std::unique_ptr<Request> NewRequest(Request::Type type, const Request& request,
-                                    int sender_id);
+                                    int sender_id, int sender_shard_id);
 
 std::unique_ptr<Request> NewRequest(Request::Type type, const Request& request,
-                                    int sender_id, int region_info);
+                                    int sender_id, int sender_shard_id, int region_info);
 
 }  // namespace resdb

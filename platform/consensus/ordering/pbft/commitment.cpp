@@ -127,6 +127,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     Request request;
     request.set_type(Request::TYPE_RESPONSE);
     request.set_sender_id(config_.GetSelfInfo().id());
+    request.set_sender_shard_id(config_.GetSelfShard());
     request.set_proxy_id(user_request->proxy_id());
     request.set_ret(-2);
     request.set_hash(user_request->hash());
@@ -142,8 +143,9 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
+  user_request->set_sender_shard_id(config_.GetSelfShard());
 
-  replica_communicator_->BroadCast(*user_request);
+  replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
 
   return 0;
 }
@@ -157,6 +159,12 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
+
+  if (request->sender_shard_id() != config_.GetSelfShard()) { 
+    LOG(ERROR) << "request does not originate from this shard, reject"; 
+    return -2; 
+  }
+
   if (request->is_recovery()) {
     if (message_manager_->GetNextSeq() == 0 ||
         request->seq() == message_manager_->GetNextSeq()) {
@@ -231,7 +239,7 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   global_stats_->IncPropose();
   global_stats_->RecordStateTime("pre-prepare");
   std::unique_ptr<Request> prepare_request = resdb::NewRequest(
-      Request::TYPE_PREPARE, *request, config_.GetSelfInfo().id());
+      Request::TYPE_PREPARE, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
   prepare_request->clear_data();
 
   // Add request to message_manager.
@@ -240,7 +248,7 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    replica_communicator_->BroadCast(*prepare_request);
+    replica_communicator_->SendMessageToShard(*prepare_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
@@ -252,6 +260,12 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
+
+  if (request->sender_shard_id() != config_.GetSelfShard()) { 
+    LOG(ERROR) << "request does not originate from this shard, reject"; 
+    return -2; 
+  }
+
   if (request->is_recovery()) {
     uint64_t seq = request->seq();
     CollectorResultCode ret = message_manager_->AddConsensusMsg(
@@ -265,7 +279,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   }
   // global_stats_->IncPrepare();
   std::unique_ptr<Request> commit_request = resdb::NewRequest(
-      Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id());
+      Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
   commit_request->mutable_data_signature()->Clear();
   // Add request to message_manager.
   // If it has received enough same requests(2f+1), broadcast the commit
@@ -289,7 +303,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
       //           << commit_request->data_signature().DebugString();
     }
     global_stats_->RecordStateTime("prepare");
-    replica_communicator_->BroadCast(*commit_request);
+    replica_communicator_->SendMessageToShard(*commit_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
@@ -302,6 +316,12 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
                << " context:" << (context == nullptr);
     return -2;
   }
+
+  if (request->sender_shard_id() != config_.GetSelfShard()) { 
+    LOG(ERROR) << "request does not originate from this shard, reject"; 
+    return -2; 
+  }
+
   uint64_t seq = request->seq();
   if (request->is_recovery()) {
     return message_manager_->AddConsensusMsg(context->signature,
@@ -336,6 +356,7 @@ int Commitment::PostProcessExecutedMsg() {
     request.set_seq(batch_resp->seq());
     request.set_type(Request::TYPE_RESPONSE);
     request.set_sender_id(config_.GetSelfInfo().id());
+    request.set_sender_shard_id(config_.GetSelfShard());
     request.set_current_view(batch_resp->current_view());
     request.set_proxy_id(batch_resp->proxy_id());
     request.set_primary_id(batch_resp->primary_id());

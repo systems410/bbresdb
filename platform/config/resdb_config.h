@@ -48,14 +48,21 @@ class ResDBConfig {
   CertificateInfo GetPublicKeyCertificateInfo() const;
 
   // Each replica infomation, including the binding urls(or ip,port).
-  const std::vector<ReplicaInfo>& GetReplicaInfos() const;
+  const std::vector<ReplicaInfo>& GetReplicaInfos(uint32_t shard_id) const;
+
+  const std::set<uint32_t>& GetShardIds() const;  
 
   ResConfigData GetConfigData() const;
 
   // The current replica infomation, including the binding urls(or ip,port).
   const ReplicaInfo& GetSelfInfo() const;
-  // The total number of replicas.
-  size_t GetReplicaNum() const;
+
+  uint32_t GetSelfShard() const; 
+
+  const std::vector<ReplicaInfo> GetClientInfos() const; 
+
+  // The total number of replicas in a shard.
+  size_t GetReplicaNum(uint32_t shard_id) const;
   // The minimum number of messages that replicas have to receive after jumping
   // to the next status.. 2f+1
   int GetMinDataReceiveNum() const;
@@ -64,7 +71,9 @@ class ResDBConfig {
   // const int GetMaxMaliciousNum() const;
   // The minimum number of messages that client has to receive from the
   // replicas.
-  int GetMinClientReceiveNum() const;
+  int GetMinClientReceiveNum(uint32_t shard_num) const;
+
+  size_t GetReplicaNumInSelfShard() const; 
 
   int GetMinCheckpointReceiveNum() const;
 
@@ -117,21 +126,23 @@ class ResDBConfig {
   uint32_t GetOutputWorkerNum() const;
   uint32_t GetTcpBatchNum() const;
 
+  const std::vector<ReplicaInfo>& GetAllReplicas() const; 
+
   // ViewChange Timeout
   uint32_t GetViewchangeCommitTimeout() const;
   void SetViewchangeCommitTimeout(uint64_t timeout_ms);
 
   uint32_t GetNumShards() const; 
-  uint32_t GetNumReplicasInShard(uint32_t shard_id) const;
 
  private:
-  void CalculateNumShards(const std::vector<ReplicaInfo>& replicas);
 
+
+  void InitShards(const std::vector<ReplicaInfo>& replicas);
+
+  std::vector<ReplicaInfo> all_replicas_; 
   ResConfigData config_data_;
-  std::vector<ReplicaInfo> replicas_;
-
-  uint32_t num_shards_ = 0; 
-  std::unordered_map<uint32_t, uint32_t> shard_counts_; 
+  std::set<uint32_t> shard_ids_; 
+  std::unordered_map<uint32_t, std::vector<ReplicaInfo>> shards_; 
 
   ReplicaInfo self_info_;
   const KeyInfo private_key_;

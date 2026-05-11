@@ -68,22 +68,26 @@ ResConfigData GetConfigData() {
       "  \"replica_info\": { "
       "  \"id\": 1, "
       "  \"ip\": \"127.0.0.1\", "
-      "  \"port\": 1234 "
+      "  \"port\": 1234, "
+      "  \"shardId\": 1 "
       "   },"
       "  \"replica_info\": { "
       "  \"id\": 2, "
       "  \"ip\": \"127.0.0.1\", "
-      "  \"port\": 1235 "
+      "  \"port\": 1235, "
+      "  \"shardId\": 1 "
       "   },"
       "  \"replica_info\": { "
       "  \"id\": 3, "
       "  \"ip\": \"127.0.0.1\", "
-      "  \"port\": 1236 "
+      "  \"port\": 1236, "
+      "  \"shardId\": 1 "
       "   },"
       "  \"replica_info\": { "
       "  \"id\": 4, "
       "  \"ip\": \"127.0.0.1\", "
-      "  \"port\": 1237 "
+      "  \"port\": 1237, "
+      "  \"shardId\": 1 "
       "   },"
       " },"
       "\"view_change_timeout_ms\": 500"
@@ -198,7 +202,7 @@ TEST_F(CheckPointManagerTest, StableCkpt) {
   for (int i = 1; i <= 4; ++i) {
     CheckPointData checkpoint_data;
     std::unique_ptr<Request> checkpoint_request =
-        NewRequest(Request::TYPE_CHECKPOINT, Request(), i);
+        NewRequest(Request::TYPE_CHECKPOINT, Request(), i, config_.GetSelfShard());
     checkpoint_data.set_seq(5);
     checkpoint_data.set_hash("1234");
     checkpoint_data.SerializeToString(checkpoint_request->mutable_data());
@@ -225,7 +229,7 @@ TEST_F(CheckPointManagerTest, StableCkptNotEnough) {
   for (int i = 1; i <= 4; ++i) {
     CheckPointData checkpoint_data;
     std::unique_ptr<Request> checkpoint_request =
-        NewRequest(Request::TYPE_CHECKPOINT, Request(), i);
+        NewRequest(Request::TYPE_CHECKPOINT, Request(), i, config_.GetSelfShard());
     checkpoint_data.set_seq(5);
     checkpoint_data.set_hash("1234");
     checkpoint_data.SerializeToString(checkpoint_request->mutable_data());
@@ -236,7 +240,7 @@ TEST_F(CheckPointManagerTest, StableCkptNotEnough) {
   for (int i = 1; i <= 4; ++i) {
     CheckPointData checkpoint_data;
     std::unique_ptr<Request> checkpoint_request =
-        NewRequest(Request::TYPE_CHECKPOINT, Request(), i);
+        NewRequest(Request::TYPE_CHECKPOINT, Request(), i, config_.GetSelfShard());
     checkpoint_data.set_seq(10);
     if (i <= 2) {
       checkpoint_data.set_hash("1234");

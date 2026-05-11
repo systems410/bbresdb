@@ -207,6 +207,7 @@ TEST(TransactionCollectorTest, AddTypeRequest) {
   {
     expect_request.set_type(Request::TYPE_PRE_PREPARE);
     expect_request.set_sender_id(1);
+    expect_request.set_sender_shard_id(1);
     std::unique_ptr<Request> request =
         std::make_unique<Request>(expect_request);
     SignatureInfo signature;
@@ -230,6 +231,7 @@ TEST(TransactionCollectorTest, AddTypeRequest) {
   {
     expect_request.set_type(Request::TYPE_PREPARE);
     expect_request.set_sender_id(1);
+    expect_request.set_sender_shard_id(1);
     std::unique_ptr<Request> request =
         std::make_unique<Request>(expect_request);
     SignatureInfo signature;
@@ -252,6 +254,7 @@ TEST(TransactionCollectorTest, AddTypeRequest) {
   {
     expect_request.set_type(Request::TYPE_PRE_PREPARE);
     expect_request.set_sender_id(3);
+    expect_request.set_sender_shard_id(1);
     std::unique_ptr<Request> request =
         std::make_unique<Request>(expect_request);
     SignatureInfo signature;
@@ -327,6 +330,7 @@ TEST(TransactionCollectorTest, DelayMainRequest) {
   {
     expect_request.set_type(Request::TYPE_PRE_PREPARE);
     expect_request.set_sender_id(1);
+    expect_request.set_sender_shard_id(1);
     std::unique_ptr<Request> request =
         std::make_unique<Request>(expect_request);
     SignatureInfo signature;
@@ -350,6 +354,7 @@ TEST(TransactionCollectorTest, DelayMainRequest) {
   {
     expect_request.set_type(Request::TYPE_PREPARE);
     expect_request.set_sender_id(1);
+    expect_request.set_sender_shard_id(1);
     std::unique_ptr<Request> request =
         std::make_unique<Request>(expect_request);
     SignatureInfo signature;
@@ -372,6 +377,7 @@ TEST(TransactionCollectorTest, DelayMainRequest) {
   {
     expect_request.set_type(Request::TYPE_PRE_PREPARE);
     expect_request.set_sender_id(3);
+    expect_request.set_sender_shard_id(1);
     std::unique_ptr<Request> request =
         std::make_unique<Request>(expect_request);
     SignatureInfo signature;

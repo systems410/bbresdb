@@ -189,17 +189,17 @@ uint32_t ViewChangeManager::AddRequest(
 
 bool ViewChangeManager::IsNextPrimary(uint64_t view_number) {
   std::lock_guard<std::mutex> lk(mutex_);
-  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos();
-  return config_.GetReplicaInfos()[(view_number - 1) % replicas.size()].id() ==
+  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos(config_.GetSelfShard());
+  return config_.GetReplicaInfos(config_.GetSelfShard())[(view_number - 1) % replicas.size()].id() ==
          config_.GetSelfInfo().id();
 }
 
 void ViewChangeManager::SetCurrentViewAndNewPrimary(uint64_t view_number) {
   system_info_->SetCurrentView(view_number);
 
-  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos();
+  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos(config_.GetSelfShard());
   uint32_t id =
-      config_.GetReplicaInfos()[(view_number - 1) % replicas.size()].id();
+      config_.GetReplicaInfos(config_.GetSelfShard())[(view_number - 1) % replicas.size()].id();
   system_info_->SetPrimary(id);
   global_stats_->ChangePrimary(id);
   LOG(ERROR) << "View Change Happened: primary:" << id

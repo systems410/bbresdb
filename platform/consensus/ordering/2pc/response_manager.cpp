@@ -88,6 +88,7 @@ ResponseManager::~ResponseManager() {
 // use system info
 int ResponseManager::GetPrimary() { return system_info_->GetPrimaryId(); }
 
+
 int ResponseManager::AddContextList(
     std::vector<std::unique_ptr<Context>> context_list, uint64_t id) {
   return context_pool_->GetCollector(id)->SetContextList(
@@ -152,7 +153,8 @@ bool ResponseManager::MayConsensusChangeStatus(
   switch (type) {
     case Request::TYPE_RESPONSE:
       if (*status == TransactionStatue::None &&
-          config_.GetMinClientReceiveNum() <= received_count) {
+        // SHARD TODO  --- who sent the request to determine what shards minimum here. 
+          config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
@@ -203,6 +205,8 @@ CollectorResultCode ResponseManager::AddResponseMsg(
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           std::atomic<TransactionStatue>* status, bool force) {
+            // SHARD TODO --->  maybe calculate the minimum needed here or something... not too sure. because we need 
+            // to know what shards are involved in this message to know how many responses we need from each shard.  
         if (MayConsensusChangeStatus(type, received_count, status)) {
           resp_received_count = 1;
           response_call_back(request, data);

@@ -204,12 +204,14 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
+      std::cout << "[SHARD] Type Client Request" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
+      std::cout << "[SHARD] Type Response" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -217,6 +219,7 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
+      std::cout << "[SHARD] Type New Txns" << std::endl;
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -239,12 +242,15 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PRE_PREPARE:
+      std::cout << "[SHARD] Type Pre Prepare" << std::endl;
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
+      std::cout << "[SHARD] Type Prepare" << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
+      std::cout << "[SHARD] Type Commit" << std::endl;
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:
@@ -305,7 +311,7 @@ int ConsensusManagerPBFT::ProcessRecoveryData(
   }
 
   std::unique_ptr<Request> response_data = NewRequest(
-      Request::TYPE_RECOVERY_DATA_RESP, Request(), config_.GetSelfInfo().id());
+      Request::TYPE_RECOVERY_DATA_RESP, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
 
   response.SerializeToString(response_data->mutable_data());
 
