@@ -75,6 +75,7 @@ class PerformanceManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
+  uint32_t GetNextShardPrimary(); 
   std::unique_ptr<Request> GenerateUserRequest();
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
@@ -113,6 +114,9 @@ class PerformanceManager {
   sem_t request_sent_signal_;
   uint64_t highest_seq_;
   uint64_t highest_seq_primary_id_;
+
+  std::vector<uint32_t> shard_primaries_; 
+  uint32_t current_shard_primary_idx_ = 0; 
 };
 
 }  // namespace resdb

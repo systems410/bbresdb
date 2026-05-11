@@ -72,6 +72,11 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
   }
   global_stats_ = Stats::GetGlobalStats();
   send_num_ = 0;
+
+  const std::set<uint32_t>& shards = config_.GetShardIds(); 
+  for (uint32_t id : shards) { 
+    shard_primaries_.push_back(id);
+  }
 }
 
 ResponseManager::~ResponseManager() {
@@ -346,11 +351,12 @@ int ResponseManager::DoBatch(
   batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
-  // SHARD TODO: This needs to rotate which leader to send it to! 
-  std::cout << "[SHARD] Sending message to shard 1 primary: " << GetPrimaryOfShard(1) << std::endl;
-  replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(1));
+  uint32_t next_primary = GetNextPrimary(); 
+  std::cout << "[SHARD] Sending message to shard " << next_primary 
+            << " primary: " << GetPrimaryOfShard(next_primary) << std::endl;
+  replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(next_primary));
   send_num_++;
-  LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(1)
+  LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
             << " batch size:" << batch_req.size();
   AddWaitingResponseRequest(std::move(new_request));
   return 0;
@@ -370,6 +376,14 @@ void ResponseManager::AddWaitingResponseRequest(
   pm_lock_.unlock();
   sem_post(&request_sent_signal_);
 }
+
+uint32_t ResponseManager::GetNextPrimary() { 
+  uint32_t id = shard_primaries_[current_shard_primary_idx_];
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
+    current_shard_primary_idx_ = 0; 
+  } 
+  return id; 
+} 
 
 void ResponseManager::RemoveWaitingResponseRequest(const std::string& hash) {
   if (!config_.GetConfigData().enable_viewchange()) {

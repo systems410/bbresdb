@@ -348,7 +348,6 @@ int ResponseManager::DoBatch(
   batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
-  // SHARD TODO: Need to rotate what shard to send this to! 
   replica_communicator_->SendMessage(*new_request, GetPrimary());
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimary()

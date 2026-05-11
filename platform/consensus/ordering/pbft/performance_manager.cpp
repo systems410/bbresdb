@@ -77,6 +77,11 @@ PerformanceManager::PerformanceManager(
   }
   total_num_ = 0;
   timeout_length_ = 100000000;  // 10s
+
+  const std::set<uint32_t>& shards = config_.GetShardIds(); 
+  for (uint32_t id : shards) { 
+    shard_primaries_.push_back(id);
+  }
 }
 
 PerformanceManager::~PerformanceManager() {
@@ -184,6 +189,14 @@ bool PerformanceManager::MayConsensusChangeStatus(
   }
   return false;
 }
+
+uint32_t PerformanceManager::GetNextShardPrimary() { 
+  uint32_t id = shard_primaries_[current_shard_primary_idx_];
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
+    current_shard_primary_idx_ = 0; 
+  } 
+  return id; 
+} 
 
 CollectorResultCode PerformanceManager::AddResponseMsg(
     const SignatureInfo& signature, std::unique_ptr<Request> request,
