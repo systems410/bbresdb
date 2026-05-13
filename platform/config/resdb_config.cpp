@@ -176,7 +176,7 @@ int ResDBConfig::GetMinDataReceiveNum(uint32_t num_replicas) const {
 }
 
 int ResDBConfig::GetMinClientReceiveNum(uint32_t shard_num) const {
-  int f = (GetReplicaNum(shard_num) - 1) / 3;
+  int f = (all_replicas_.size() - 1) / 3;
   return std::max(f + 1, 1);
 }
 
