@@ -63,6 +63,11 @@ void MessageManager::SetNextSeq(uint64_t seq) {
 
 int64_t MessageManager::GetNextSeq() { return next_seq_; }
 
+void MessageManager::IncrementSequence() { 
+  std::unique_lock<std::mutex> lk(seq_mutex_);
+  next_seq_++;
+}
+
 absl::StatusOr<uint64_t> MessageManager::AssignNextSeq() {
   std::unique_lock<std::mutex> lk(seq_mutex_);
   return next_seq_++;

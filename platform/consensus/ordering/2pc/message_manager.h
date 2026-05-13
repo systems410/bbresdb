@@ -48,6 +48,7 @@ class MessageManager {
   MessageManager(const ResDBConfig& config, SystemInfo* system_info);
   ~MessageManager();
 
+  void IncrementSequence(); 
   absl::StatusOr<uint64_t> AssignNextSeq();
 
   int64_t GetCurrentPrimary() const;

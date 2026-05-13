@@ -245,6 +245,8 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     global_stats_->RecordStateTime("commit");
     std::cout << "[2PC] Commitment::ProcessCommitMsg: Sending commit ack message to " << sender << std::endl;
     replica_communicator_->SendMessage(*ack, sender);
+    // Because leaders change, we must keep up on the current sequence 
+    message_manager_->IncrementSequence();
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
