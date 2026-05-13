@@ -27,68 +27,37 @@
 namespace resdb {
 
 namespace twopc {
-
-ConsensusManager2PC::ConsensusManager2PC(
-    const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
-    std::unique_ptr<CustomQuery> query_executor)
-    : ConsensusManager(config),
-      system_info_(std::make_unique<SystemInfo>(config)),
-      checkpoint_manager_(std::make_unique<CheckPointManager>(
-          config, GetBroadCastClient(), GetSignatureVerifier(),
-          system_info_.get())),
+  
+ConsensusManager2PC::ConsensusManager2PC(const ResDBConfig& config, ReplicaCommunicator* communicator, 
+                                         SystemInfo* info) 
+    : ConsensusManager(config, true),
+      system_info_(info),
       message_manager_(std::make_unique<MessageManager>(
-          config, std::move(executor), checkpoint_manager_.get(),
-          system_info_.get())),
+          config, system_info_)),
       commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
-                                               GetBroadCastClient(),
-                                               GetSignatureVerifier())),
+                                               communicator, system_info_)),
       response_manager_(config_.IsPerformanceRunning()
                             ? nullptr
                             : std::make_unique<ResponseManager>(
                                   config_, GetBroadCastClient(),
-                                  system_info_.get(), GetSignatureVerifier())),
+                                  system_info_, GetSignatureVerifier())),
       performance_manager_(config_.IsPerformanceRunning()
                                ? std::make_unique<PerformanceManager>(
                                      config_, GetBroadCastClient(),
-                                     system_info_.get(), GetSignatureVerifier())
-                               : nullptr),
-      view_change_manager_(std::make_unique<ViewChangeManager>(
-          config_, checkpoint_manager_.get(), message_manager_.get(),
-          system_info_.get(), GetBroadCastClient(), GetSignatureVerifier())),
-      recovery_(std::make_unique<Recovery>(config_, checkpoint_manager_.get(),
-                                           system_info_.get(),
-                                           message_manager_->GetStorage())),
-      query_(std::make_unique<Query>(config_, recovery_.get(),
-                                     std::move(query_executor))) {
+                                     system_info_, GetSignatureVerifier())
+                               : nullptr) {
   LOG(INFO) << "is running is performance mode:"
             << config_.IsPerformanceRunning();
   global_stats_ = Stats::GetGlobalStats();
-
-  view_change_manager_->SetDuplicateManager(commitment_->GetDuplicateManager());
-
-  recovery_->ReadLogs(
-      [&](const SystemInfoData& data) {
-        LOG(ERROR) << " read data info:" << data.view()
-                   << " primary:" << data.primary_id();
-        system_info_->SetCurrentView(data.view());
-        system_info_->SetPrimary(data.primary_id());
-      },
-      [&](std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
-        return InternalConsensusCommit(std::move(context), std::move(request));
-      },
-      [&](int seq) { message_manager_->SetNextCommitSeq(seq + 1); });
-  LOG(ERROR) << " recovery is done";
 }
 
-void ConsensusManager2PC::SetNeedCommitQC(bool need_qc) {
-  commitment_->SetNeedCommitQC(need_qc);
+void ConsensusManager2PC::SetCommitCallback(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> commit_callback) { 
+  message_manager_->SetConsensusCallback(std::move(commit_callback));
 }
 
 void ConsensusManager2PC::Start() {
   LOG(ERROR) << " ======= start";
   ConsensusManager::Start();
-  recovery_thread_ =
-      std::thread(&ConsensusManager2PC::RemoteRecoveryProcess, this);
 }
 
 std::vector<ReplicaInfo> ConsensusManager2PC::GetReplicas() {
@@ -103,24 +72,14 @@ uint32_t ConsensusManager2PC::GetVersion() {
   return system_info_->GetCurrentView();
 }
 
-void ConsensusManager2PC::SetPrimary(uint32_t primary, uint64_t version) {
-  if (version > system_info_->GetCurrentView()) {
-    system_info_->SetCurrentView(version);
-    system_info_->SetPrimary(primary);
-  }
+void ConsensusManager2PC::SetPrimary(uint32_t primary) {
+  system_info_->SetPrimary(primary);
 }
 
 void ConsensusManager2PC::AddPendingRequest(std::unique_ptr<Context> context,
                                              std::unique_ptr<Request> request) {
   std::lock_guard<std::mutex> lk(mutex_);
   request_pending_.push(std::make_pair(std::move(context), std::move(request)));
-}
-
-void ConsensusManager2PC::AddComplainedRequest(
-    std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
-  std::lock_guard<std::mutex> lk(mutex_);
-  request_complained_.push(
-      std::make_pair(std::move(context), std::move(request)));
 }
 
 absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
@@ -135,64 +94,14 @@ ConsensusManager2PC::PopPendingRequest() {
   return new_request;
 }
 
-absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-ConsensusManager2PC::PopComplainedRequest() {
-  std::lock_guard<std::mutex> lk(mutex_);
-  if (request_complained_.empty()) {
-    // LOG(ERROR) << "empty:";
-    return absl::InternalError("No Data.");
-  }
-  auto new_request = std::move(request_complained_.front());
-  request_complained_.pop();
-  return new_request;
-}
-
 // The implementation of PBFT.
 int ConsensusManager2PC::ConsensusCommit(std::unique_ptr<Context> context,
                                           std::unique_ptr<Request> request) {
   LOG(INFO) << "recv impl type:" << request->type() << " "
             << "sender id:" << request->sender_id()
             << " primary:" << system_info_->GetPrimaryId();
-  // If it is in viewchange, push the request to the queue
-  // for the requests from the new view which come before
-  // the local new view done.
-  recovery_->AddRequest(context.get(), request.get());
-  if (config_.GetConfigData().enable_viewchange()) {
-    view_change_manager_->MayStart();
-    if (view_change_manager_->IsInViewChange()) {
-      switch (request->type()) {
-        case Request::TYPE_NEW_TXNS:
-        case Request::TYPE_PRE_PREPARE:
-        case Request::TYPE_PREPARE:
-        case Request::TYPE_COMMIT:
-          AddPendingRequest(std::move(context), std::move(request));
-          return 0;
-      }
-    } else {
-      while (true) {
-        auto new_request = PopPendingRequest();
-        if (!new_request.ok()) {
-          break;
-        }
-        InternalConsensusCommit(std::move((*new_request).first),
-                                std::move((*new_request).second));
-      }
-    }
-  }
+
   int ret = InternalConsensusCommit(std::move(context), std::move(request));
-  if (config_.GetConfigData().enable_viewchange()) {
-    if (ret == -4) {
-      while (true) {
-        auto new_request = PopComplainedRequest();
-        if (!new_request.ok()) {
-          break;
-        }
-        // LOG(ERROR) << "[POP COMPLAINED REQUEST]";
-        InternalConsensusCommit(std::move((*new_request).first),
-                                std::move((*new_request).second));
-      }
-    }
-  }
   return ret;
 }
 
@@ -205,27 +114,8 @@ int ConsensusManager2PC::InternalConsensusCommit(
              << " is convery:" << request->is_recovery();
 
   switch (request->type()) {
-    // Received by the proxy 
-    case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received client request message" << std::endl;
-      if (config_.IsPerformanceRunning()) {
-        return performance_manager_->StartEval();
-      }
-      return response_manager_->NewUserRequest(std::move(context),
-                                               std::move(request));
-    // Received by the proxy 
-    case Request::TYPE_RESPONSE:
-      std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received response message" << std::endl;
-      if (config_.IsPerformanceRunning()) {
-        return performance_manager_->ProcessResponseMsg(std::move(context),
-                                                        std::move(request));
-      }
-      return response_manager_->ProcessResponseMsg(std::move(context),
-                                                   std::move(request));
-
-
     // Received by the coordinator. Send the prepare messages to the replicas to get their vote 
-    case Request::TYPE_NEW_TXNS: {
+    case Request::TYPE_2PC_NEW_TXNS: {
       std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received txns message" << std::endl;
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
@@ -233,71 +123,33 @@ int ConsensusManager2PC::InternalConsensusCommit(
                                                std::move(request));
       if (ret == -3) {
         LOG(ERROR) << "TYPE BAD RETURN";
-        std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>
-            request_complained;
-        {
-          std::lock_guard<std::mutex> lk(commitment_->rc_mutex_);
-
-          request_complained =
-              std::move(commitment_->request_complained_.front());
-          commitment_->request_complained_.pop();
-        }
-        AddComplainedRequest(std::move(request_complained.first),
-                             std::move(request_complained.second));
-        view_change_manager_->AddComplaintTimer(proxy_id, hash);
       }
       return ret;
     }
 
     // Received by the coordinator, used to count up the number of votes 
-    case Request::TYPE_VOTE_COMMIT: 
+    case Request::TYPE_2PC_VOTE_COMMIT: 
       std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received vote to commit message" << std::endl;
       return commitment_->ProcessVoteMsg(std::move(context), 
                                          std::move(request));
     
 
     // Received by all participants. This is where they will respond with their vote 
-    case Request::TYPE_PREPARE:
+    case Request::TYPE_2PC_PREPARE:
       std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received prepare message" << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
 
     // Received by all participants. This is the global descision to commit 
-    case Request::TYPE_COMMIT:
+    case Request::TYPE_2PC_COMMIT:
       std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received commit message" << std::endl;
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
 
-    case Request::TYPE_COMMIT_ACK: 
+    case Request::TYPE_2PC_COMMIT_ACK: 
       std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received commit ack message" << std::endl;
       return commitment_->ProcessCommitAckMsg(std::move(context), 
                                               std::move(request));
-
-    // Other 
-    case Request::TYPE_CHECKPOINT:
-      return checkpoint_manager_->ProcessCheckPoint(std::move(context),
-                                                    std::move(request));
-    case Request::TYPE_STATUS_SYNC:
-      return checkpoint_manager_->ProcessStatusSync(std::move(context),
-                                                    std::move(request));
-    case Request::TYPE_VIEWCHANGE:
-      return view_change_manager_->ProcessViewChange(std::move(context),
-                                                     std::move(request));
-    case Request::TYPE_NEWVIEW:
-      return view_change_manager_->ProcessNewView(std::move(context),
-                                                  std::move(request));
-    case Request::TYPE_QUERY:
-      return query_->ProcessQuery(std::move(context), std::move(request));
-    case Request::TYPE_REPLICA_STATE:
-      return query_->ProcessGetReplicaState(std::move(context),
-                                            std::move(request));
-    case Request::TYPE_CUSTOM_QUERY:
-      return query_->ProcessCustomQuery(std::move(context), std::move(request));
-    case Request::TYPE_RECOVERY_DATA:
-      return ProcessRecoveryData(std::move(context), std::move(request));
-    case Request::TYPE_RECOVERY_DATA_RESP:
-      return ProcessRecoveryDataResponse(std::move(context),
-                                         std::move(request));
   }
   return 0;
 }
@@ -305,98 +157,6 @@ int ConsensusManager2PC::InternalConsensusCommit(
 void ConsensusManager2PC::SetupPerformanceDataFunc(
     std::function<std::string()> func) {
   performance_manager_->SetDataFunc(func);
-}
-
-void ConsensusManager2PC::SetPreVerifyFunc(
-    std::function<bool(const Request&)> func) {
-  commitment_->SetPreVerifyFunc(func);
-}
-
-int ConsensusManager2PC::ProcessRecoveryData(
-    std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
-  RecoveryRequest recovery_data;
-  if (!recovery_data.ParseFromString(request->data())) {
-    LOG(ERROR) << "parse checkpont data fail:";
-    return -2;
-  }
-  LOG(ERROR) << " obtain min seq:" << recovery_data.min_seq()
-             << " max seq:" << recovery_data.max_seq()
-             << " from:" << request->sender_id();
-  if (request->sender_id() == config_.GetSelfInfo().id()) {
-    return 0;
-  }
-  RecoveryResponse response;
-  int ret = recovery_->GetData(recovery_data, response);
-  if (ret) {
-    return ret;
-  }
-
-  std::unique_ptr<Request> response_data = NewRequest(
-      Request::TYPE_RECOVERY_DATA_RESP, Request(), config_.GetSelfInfo().id());
-
-  response.SerializeToString(response_data->mutable_data());
-
-  LOG(ERROR) << " obtain min seq:" << recovery_data.min_seq()
-             << " max seq:" << recovery_data.max_seq()
-             << " data size:" << response.request_size();
-
-  GetBroadCastClient()->SendMessage(*response_data, request->sender_id());
-
-  return 0;
-}
-
-int ConsensusManager2PC::ProcessRecoveryDataResponse(
-    std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
-  recovery_queue_.Push(std::move(request));
-  return 0;
-}
-
-void ConsensusManager2PC::RemoteRecoveryProcess() {
-  uint64_t last_recovery = 0;
-  std::set<uint64_t> data;
-
-  while (IsRunning()) {
-    auto request = recovery_queue_.Pop();
-    if (request == nullptr) {
-      continue;
-    }
-
-    RecoveryResponse recovery_data;
-    if (!recovery_data.ParseFromString(request->data())) {
-      LOG(ERROR) << "parse checkpont data fail:";
-      continue;
-    }
-
-    LOG(ERROR) << " receive recovery  data from " << request->sender_id()
-               << " data size:" << recovery_data.request_size()
-               << " signrue:" << recovery_data.signature_size();
-
-    for (int i = 0; i < recovery_data.request().size(); i++) {
-      uint64_t seq = recovery_data.request(i).seq();
-      int type = recovery_data.request(i).type();
-      if (checkpoint_manager_->IsCommitted(seq)) {
-        LOG(ERROR) << " check recovery remote seq:" << seq << " type:" << type
-                   << " has been recovered.";
-        continue;
-      }
-
-      uint64_t last_seq = checkpoint_manager_->GetLastCommit();
-      if (seq - last_seq > 1000) {
-        LOG(ERROR) << " check seq:" << seq << " last:" << last_seq
-                   << " data is missing, skip.";
-        continue;
-      }
-
-      auto context = std::make_unique<Context>();
-      context->signature = recovery_data.signature(i);
-      auto request = std::make_unique<Request>(recovery_data.request(i));
-      view_change_manager_->SetCurrentViewAndNewPrimary(
-          request->current_view());
-      request->set_force_recovery(true);
-
-      InternalConsensusCommit(std::move(context), std::move(request));
-    }
-  }
 }
 
 

@@ -40,17 +40,21 @@ bool ReplicaExisted(const ReplicaInfo& replica_info,
 
 }  // namespace
 
-ConsensusManager::ConsensusManager(const ResDBConfig& config)
+ConsensusManager::ConsensusManager(const ResDBConfig& config, bool passive)
     : config_(config), global_stats_(Stats::GetGlobalStats()) {
   if (config_.SignatureVerifierEnabled()) {
     verifier_ = std::make_unique<SignatureVerifier>(
         config_.GetPrivateKey(), config_.GetPublicKeyCertificateInfo());
   }
-  bc_client_ = GetReplicaClient(config_.GetAllReplicas(), true);
+  if (!passive) { 
+    bc_client_ = GetReplicaClient(config_.GetAllReplicas(), true);
+  }
 }
 
 ConsensusManager::~ConsensusManager() {
-  bc_client_.reset();
+  if (bc_client_) { 
+    bc_client_.reset();
+  }
   Stop();
 }
 
@@ -322,7 +326,10 @@ std::vector<ReplicaInfo> ConsensusManager::GetAllReplicas() {
 }
 
 void ConsensusManager::BroadCast(const Request& request) {
-  int ret = bc_client_->SendMessage(request);
+  int ret = -1; 
+  if (bc_client_) { 
+    ret = bc_client_->SendMessage(request);
+  }
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";
   }
@@ -343,7 +350,10 @@ void ConsensusManager::SendMessage(const google::protobuf::Message& message,
     return;
   }
 
-  int ret = bc_client_->SendMessage(message, target_replica);
+  int ret = -1; 
+  if (bc_client_) { 
+    ret = bc_client_->SendMessage(message, target_replica);
+  }
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";
   }
@@ -363,7 +373,9 @@ void ConsensusManager::AddNewReplica(const ReplicaInfo& info) {}
 
 void ConsensusManager::AddNewClient(const ReplicaInfo& info) {
   clients_.push_back(info);
-  bc_client_->UpdateClientReplicas(clients_);
+  if (bc_client_) { 
+    bc_client_->UpdateClientReplicas(clients_);
+  }
 }
 
 void ConsensusManager::SetPrimary(uint32_t primary, uint64_t version) {}

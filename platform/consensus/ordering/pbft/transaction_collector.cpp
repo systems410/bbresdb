@@ -102,16 +102,16 @@ int TransactionCollector::AddRequest(
     bool force = false;
     if (view_ && view_ < view && !is_prepared_) {
       force = true;
-      atomic_mian_request_.Clear();
+      atomic_main_request_.Clear();
     }
-    int ret = atomic_mian_request_.Set(request_info);
+    int ret = atomic_main_request_.Set(request_info);
     if (!ret) {
       other_main_request_.insert(std::move(request_info));
       LOG(ERROR) << "set main request fail: data existed:" << seq
                  << " ret:" << ret;
       return -2;
     }
-    auto main_request = atomic_mian_request_.Reference();
+    auto main_request = atomic_main_request_.Reference();
     if (main_request->request == nullptr) {
       LOG(ERROR) << "set main request data fail";
       return -2;
@@ -139,16 +139,16 @@ int TransactionCollector::AddRequest(
                     false);
           if (status_.load() == TransactionStatue::READY_COMMIT) {
             is_prepared_ = true;
-            if (atomic_mian_request_.Reference() != nullptr &&
-                atomic_mian_request_.Reference()->request->hash() != hash) {
-              atomic_mian_request_.Clear();
+            if (atomic_main_request_.Reference() != nullptr &&
+                atomic_main_request_.Reference()->request->hash() != hash) {
+              atomic_main_request_.Clear();
               for (auto it = other_main_request_.begin();
                    it != other_main_request_.end(); it++) {
                 if ((*it)->request->hash() == hash) {
                   auto request_info = std::make_unique<RequestInfo>();
                   request_info->signature = (*it)->signature;
                   request_info->request = std::move((*it)->request);
-                  atomic_mian_request_.Set(request_info);
+                  atomic_main_request_.Set(request_info);
                   break;
                 }
               }
@@ -203,7 +203,7 @@ int TransactionCollector::Commit() {
     return -2;
   }
 
-  auto main_request = atomic_mian_request_.Reference();
+  auto main_request = atomic_main_request_.Reference();
   if (main_request == nullptr) {
     LOG(ERROR) << "no main:" << seq_;
     return -2;
@@ -225,7 +225,7 @@ int TransactionCollector::Commit() {
 
 std::vector<std::string> TransactionCollector::GetAllStoredHash() {
   std::vector<std::string> v;
-  auto main_request = atomic_mian_request_.Reference();
+  auto main_request = atomic_main_request_.Reference();
   if (main_request) {
     v.push_back(main_request->request->hash());
   }

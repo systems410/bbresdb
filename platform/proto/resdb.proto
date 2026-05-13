@@ -58,12 +58,17 @@ message Request {
         TYPE_CUSTOM_QUERY = 18;
         TYPE_CUSTOM_CONSENSUS = 19;
         TYPE_STATUS_SYNC = 20;
-        TYPE_VOTE_COMMIT = 21; 
-        TYPE_VOTE_ABORT = 22;
-        TYPE_COMMIT_ACK = 23;
-        TYPE_ABORT_ACK = 24;
 
-        NUM_OF_TYPE = 25; // the total number of types.
+        TYPE_2PC_VOTE_COMMIT = 21; 
+        TYPE_2PC_VOTE_ABORT = 22;
+        TYPE_2PC_COMMIT_ACK = 23;
+        TYPE_2PC_ABORT_ACK = 24;
+
+        TYPE_2PC_PREPARE = 25; 
+        TYPE_2PC_COMMIT = 26;
+        TYPE_2PC_NEW_TXNS = 27;
+
+        NUM_OF_TYPE = 28; // the total number of types.
                        // Used to create the collector.
     };
     int32 type = 1;

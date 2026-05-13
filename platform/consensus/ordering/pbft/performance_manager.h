@@ -30,6 +30,7 @@
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
+
 namespace resdb {
 
 class PerformanceClientTimeout {

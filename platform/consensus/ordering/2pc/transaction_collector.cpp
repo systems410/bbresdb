@@ -68,12 +68,14 @@ std::vector<RequestInfo> TransactionCollector::GetPreparedProof() {
 }
 
 int TransactionCollector::AddRequest(
-    std::unique_ptr<Request> request, const SignatureInfo& signature,
+    std::unique_ptr<Request> request, std::unique_ptr<Context> context,
     bool is_main_request,
     std::function<void(const Request&, int received_count, CollectorDataType*,
                        std::atomic<TransactionStatue>* status, bool force)>
-        call_back) {
+        call_back,
+      std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> execute_func) {
   if (request == nullptr) {
+    std::cout << "[2PC] request == nullptr" << std::endl;
     return -2;
   }
 
@@ -81,8 +83,8 @@ int TransactionCollector::AddRequest(
   std::string hash = request->hash();
   int type = request->type();
   uint64_t seq = request->seq();
-  uint64_t view = request->current_view();
   if (is_committed_) {
+    std::cout << "[2PC] sequence number: " << seq << " is committed" << std::endl;
     return -2;
   }
   if (status_.load() == EXECUTED) {
@@ -92,80 +94,38 @@ int TransactionCollector::AddRequest(
   if (seq_ != static_cast<uint64_t>(request->seq())) {
     LOG(ERROR) << "data invalid, seq not the same:" << seq
                << " collect seq:" << seq_;
+    std::cout << "[2PC] invalid seq" << std::endl;
     return -2;
   }
 
   if (is_main_request) {
     auto request_info = std::make_unique<RequestInfo>();
-    request_info->signature = signature;
+    request_info->signature = context->signature;
     request_info->request = std::make_unique<Request>(*request);
     bool force = false;
-    if (view_ && view_ < view && !is_prepared_) {
-      force = true;
-      atomic_mian_request_.Clear();
-    }
-    int ret = atomic_mian_request_.Set(request_info);
+    int ret = atomic_main_request_.Set(request_info);
     if (!ret) {
       other_main_request_.insert(std::move(request_info));
+      std::cout << "[2PC] set main fail" << std::endl;
       LOG(ERROR) << "set main request fail: data existed:" << seq
                  << " ret:" << ret;
       return -2;
     }
-    auto main_request = atomic_mian_request_.Reference();
+    auto main_request = atomic_main_request_.Reference();
     if (main_request->request == nullptr) {
       LOG(ERROR) << "set main request data fail";
       return -2;
     }
-    view_ = view;
+    auto context_info = std::make_unique<ContextInfo>(); 
+    context_info->context = std::move(context);
+    ret = atomic_main_context_.Set(context_info);
+    if (!ret) {
+      LOG(ERROR) << "set main context fail: data existed:" << seq
+                 << " ret:" << ret;
+      return -2;
+    }
   } 
 
-  if (enable_viewchange_) {
-    if (type == Request::TYPE_PREPARE) {
-      if (status_.load() <= TransactionStatue::READY_PREPARE) {
-        auto request_info = std::make_unique<RequestInfo>();
-        request_info->signature = signature;
-        request_info->request = std::make_unique<Request>(*request);
-        std::lock_guard<std::mutex> lk(mutex_);
-        if (is_prepared_) {
-          return 0;
-        }
-        prepared_proof_.push_back(std::move(request_info));
-        if (senders_[type].count(hash) == 0) {
-          senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
-        }
-        senders_[type][hash][sender_id] = 1;
-        call_back(*request, senders_[type][hash].count(), nullptr, &status_,
-                  false);
-        if (status_.load() == TransactionStatue::READY_COMMIT) {
-          is_prepared_ = true;
-          if (atomic_mian_request_.Reference() != nullptr &&
-            atomic_mian_request_.Reference()->request->hash() != hash) {
-            atomic_mian_request_.Clear();
-            for (auto it = other_main_request_.begin();
-                 it != other_main_request_.end(); it++) {
-              if ((*it)->request->hash() == hash) {
-                auto request_info = std::make_unique<RequestInfo>();
-                request_info->signature = (*it)->signature;
-                request_info->request = std::move((*it)->request);
-                atomic_mian_request_.Set(request_info);
-                break;
-              }
-            }
-            other_main_request_.clear();
-          }
-          int pos = 0;
-          for (size_t i = 0; i < prepared_proof_.size(); i++) {
-            if (prepared_proof_[i]->request->hash() == hash) {
-              prepared_proof_[pos++] = std::move(prepared_proof_[i]);
-            }
-          }
-          prepared_proof_.erase(prepared_proof_.begin() + pos,
-                                prepared_proof_.end());
-        }
-      }
-      return 0;
-    }
-  }
 
   if (request->type() == Request::TYPE_COMMIT) {
     if (request->has_data_signature() &&
@@ -186,14 +146,15 @@ int TransactionCollector::AddRequest(
               false);
   }
 
-  if (status_.load() == TransactionStatue::READY_EXECUTE) {
-    Commit();
+  if (status_.load() == TransactionStatue::READY_EXECUTE && execute_func != nullptr) {
+    Commit(std::move(execute_func));
     return 1;
   }
   return 0;
 }
 
-int TransactionCollector::Commit() {
+int TransactionCollector::Commit(std::function<void(std::unique_ptr<Request>, 
+                                 std::unique_ptr<Context>)> execute_func) { 
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
   bool res = status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
@@ -202,14 +163,20 @@ int TransactionCollector::Commit() {
     return -2;
   }
 
-  auto main_request = atomic_mian_request_.Reference();
+  auto main_request = atomic_main_request_.Reference();
   if (main_request == nullptr) {
     LOG(ERROR) << "no main:" << seq_;
     return -2;
   }
 
+  auto main_context = atomic_main_context_.Reference(); 
+  if (main_context == nullptr) { 
+    LOG(ERROR) << "no main context:" << seq_;
+    return -2;
+  }
+
   is_committed_ = true;
-  if (executor_ && main_request->request) {
+  if (main_request->request && main_context->context) {
     if (!commit_certs_.empty()) {
       for (const auto& sig : commit_certs_) {
         *main_request->request->mutable_committed_certs()
@@ -217,14 +184,14 @@ int TransactionCollector::Commit() {
         // LOG(ERROR) << "add sig:" << sig.DebugString();
       }
     }
-    executor_->Commit(std::move(main_request->request));
-  }
+    execute_func(std::move(main_request->request), std::move(main_context->context)); 
+  } 
   return 0;
 }
 
 std::vector<std::string> TransactionCollector::GetAllStoredHash() {
   std::vector<std::string> v;
-  auto main_request = atomic_mian_request_.Reference();
+  auto main_request = atomic_main_request_.Reference();
   if (main_request) {
     v.push_back(main_request->request->hash());
   }

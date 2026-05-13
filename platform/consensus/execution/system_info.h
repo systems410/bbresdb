@@ -42,8 +42,12 @@ class SystemInfo {
 
   uint32_t GetPrimaryId() const;
   uint32_t GetPrimaryIdOfShard(uint32_t shard_id); 
+  std::set<uint32_t> GetAllShardPrimaryIds();
   void SetPrimary(uint32_t id);
   void SetPrimaryOfShard(uint32_t shard_id, uint32_t id);
+
+  void SetCrossShardPrimaryId(uint32_t id);
+  uint32_t GetCrossShardPrimaryId() const;
 
   uint64_t GetCurrentView() const;
   void SetCurrentView(uint64_t);
@@ -59,5 +63,8 @@ class SystemInfo {
   // Represents this shards primary ids 
   std::atomic<uint32_t> primary_id_;
   std::atomic<uint64_t> view_;
+
+  std::atomic<uint32_t> cross_shard_primary_id_; 
+
 };
 }  // namespace resdb

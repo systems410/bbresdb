@@ -49,9 +49,9 @@ PerformanceManager::PerformanceManager(
     : config_(config),
       replica_communicator_(replica_communicator),
       collector_pool_(std::make_unique<LockFreeCollectorPool>(
-          "response", config_.GetMaxProcessTxn(), nullptr)),
+          "response", config_.GetMaxProcessTxn())),
       context_pool_(std::make_unique<LockFreeCollectorPool>(
-          "context", config_.GetMaxProcessTxn(), nullptr)),
+          "context", config_.GetMaxProcessTxn())),
       batch_queue_("user request"),
       system_info_(system_info),
       verifier_(verifier) {
@@ -142,7 +142,7 @@ int PerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> context,
     return 0;
   }
   CollectorResultCode ret =
-      AddResponseMsg(context->signature, std::move(request),
+      AddResponseMsg(std::move(context), std::move(request),
                      [&](const Request& request,
                          const TransactionCollector::CollectorDataType*) {
                        response = std::make_unique<Request>(request);
@@ -187,7 +187,7 @@ bool PerformanceManager::MayConsensusChangeStatus(
 }
 
 CollectorResultCode PerformanceManager::AddResponseMsg(
-    const SignatureInfo& signature, std::unique_ptr<Request> request,
+    std::unique_ptr<Context> context, std::unique_ptr<Request> request,
     std::function<void(const Request&,
                        const TransactionCollector::CollectorDataType*)>
         response_call_back) {
@@ -210,7 +210,7 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
   seq = request->seq();
   int resp_received_count = 0;
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
-      std::move(request), signature, false,
+      std::move(request), std::move(context), false,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           std::atomic<TransactionStatue>* status, bool force) {
@@ -218,7 +218,7 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
           resp_received_count = 1;
           response_call_back(request, data);
         }
-      });
+      }, nullptr);
   if (ret != 0) {
     return CollectorResultCode::INVALID;
   }

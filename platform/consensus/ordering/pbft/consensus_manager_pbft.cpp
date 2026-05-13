@@ -39,7 +39,7 @@ ConsensusManagerPBFT::ConsensusManagerPBFT(
           system_info_.get())),
       commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
                                                GetBroadCastClient(),
-                                               GetSignatureVerifier())),
+                                               GetSignatureVerifier(), system_info_.get())),
       response_manager_(config_.IsPerformanceRunning()
                             ? nullptr
                             : std::make_unique<ResponseManager>(
@@ -163,6 +163,7 @@ int ConsensusManagerPBFT::ConsensusCommit(std::unique_ptr<Context> context,
         case Request::TYPE_PRE_PREPARE:
         case Request::TYPE_PREPARE:
         case Request::TYPE_COMMIT:
+        case Request::TYPE_2PC_NEW_TXNS: 
           AddPendingRequest(std::move(context), std::move(request));
           return 0;
       }
@@ -204,14 +205,14 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "[SHARD] Type Client Request" << std::endl;
+      std::cout << "[PBFT] Type Client Request" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
-      std::cout << "[SHARD] Type Response" << std::endl;
+      std::cout << "[PBFT] Type Response" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -219,7 +220,7 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
-      std::cout << "[SHARD] Type New Txns" << std::endl;
+      std::cout << "[PBFT] Type New Txns" << std::endl;
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -242,15 +243,15 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PRE_PREPARE:
-      std::cout << "[SHARD] Type Pre Prepare" << std::endl;
+      std::cout << "[PBFT] Type Pre Prepare" << std::endl;
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
-      std::cout << "[SHARD] Type Prepare" << std::endl;
+      std::cout << "[PBFT] Type Prepare" << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
-      std::cout << "[SHARD] Type Commit" << std::endl;
+      std::cout << "[PBFT] Type Commit" << std::endl;
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:
@@ -277,6 +278,17 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
     case Request::TYPE_RECOVERY_DATA_RESP:
       return ProcessRecoveryDataResponse(std::move(context),
                                          std::move(request));
+    case Request::TYPE_2PC_ABORT_ACK: 
+    case Request::TYPE_2PC_COMMIT_ACK: 
+    case Request::TYPE_2PC_NEW_TXNS: 
+    case Request::TYPE_2PC_PREPARE: 
+    case Request::TYPE_2PC_VOTE_ABORT: 
+    case Request::TYPE_2PC_VOTE_COMMIT: 
+    case Request::TYPE_2PC_COMMIT: 
+      std::cout << "[PBFT] Transfering message to 2PC" << std::endl;
+      return commitment_->ProcessCrossShardConsensusMessage(std::move(context), 
+                                                            std::move(request));
+
   }
   return 0;
 }

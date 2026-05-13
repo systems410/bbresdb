@@ -30,12 +30,14 @@ namespace resdb {
 Commitment::Commitment(const ResDBConfig& config,
                        MessageManager* message_manager,
                        ReplicaCommunicator* replica_communicator,
-                       SignatureVerifier* verifier)
+                       SignatureVerifier* verifier, 
+                       SystemInfo* system_info)
     : config_(config),
       message_manager_(message_manager),
       stop_(false),
       replica_communicator_(replica_communicator),
-      verifier_(verifier) {
+      verifier_(verifier),
+      system_info_(system_info) {
   executed_thread_ = std::thread(&Commitment::PostProcessExecutedMsg, this);
   global_stats_ = Stats::GetGlobalStats();
   duplicate_manager_ = std::make_unique<DuplicateManager>(config);
@@ -62,28 +64,13 @@ void Commitment::SetPreVerifyFunc(
 
 void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 
-// Handle the user request and send a pre-prepare message to others.
-// TODO if not a primary, redicet to the primary replica.
-int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
-                                  std::unique_ptr<Request> user_request) {
+int Commitment::BeginPBFT(std::unique_ptr<Request> user_request, std::unique_ptr<Context> context) { 
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
 
-  if (uint64_t seq =
-          duplicate_manager_->CheckIfExecuted(user_request->hash())) {
-    LOG(ERROR) << "This request is already executed with seq: " << seq;
-    user_request->set_seq(seq);
-    message_manager_->SendResponse(std::move(user_request));
-    return -2;
-  }
-
   if (config_.GetSelfInfo().id() != message_manager_->GetCurrentPrimary()) {
-    // LOG(ERROR) << "current node is not primary. primary:"
-    //            << message_manager_->GetCurrentPrimary()
-    //            << " seq:" << user_request->seq()
-    //            << " hash:" << user_request->hash();
     LOG(INFO) << "NOT PRIMARY, Primary is "
               << message_manager_->GetCurrentPrimary();
     replica_communicator_->SendMessage(*user_request,
@@ -93,9 +80,17 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
       request_complained_.push(
           std::make_pair(std::move(context), std::move(user_request)));
     }
-
     return -3;
   }
+
+  if (uint64_t seq =
+          duplicate_manager_->CheckIfExecuted(user_request->hash())) {
+    LOG(ERROR) << "This request is already executed with seq: " << seq;
+    user_request->set_seq(seq);
+    message_manager_->SendResponse(std::move(user_request));
+    return -2; 
+  }
+
 
   // check signatures
   bool valid = verifier_->VerifyMessage(user_request->data(),
@@ -136,18 +131,43 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2;
   }
 
+
   global_stats_->RecordStateTime("request");
 
-  user_request->set_type(Request::TYPE_PRE_PREPARE);
   user_request->set_current_view(message_manager_->GetCurrentView());
+  user_request->set_type(Request::TYPE_PRE_PREPARE);
+  user_request->set_sender_shard_id(config_.GetSelfShard());
   user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
-  user_request->set_sender_shard_id(config_.GetSelfShard());
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
+  return 0; 
+} 
 
-  return 0;
+
+int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
+                                  std::unique_ptr<Request> user_request) {
+
+  if (!shard_consensus_manager_) {
+    shard_consensus_manager_ = CreateShardConsensusManager();
+  } 
+  
+  shard_consensus_manager_->SetCommitCallback([this](std::unique_ptr<Request> req, std::unique_ptr<Context> context) { 
+    BeginPBFT(std::move(req), std::move(context));
+  });
+
+  user_request->set_type(Request::TYPE_2PC_NEW_TXNS);
+  return shard_consensus_manager_->ConsensusCommit(std::move(context), std::move(user_request));
+}
+
+
+
+std::unique_ptr<twopc::ConsensusManager2PC> Commitment::CreateShardConsensusManager() {
+    return std::make_unique<twopc::ConsensusManager2PC>(
+      ResDBConfig(config_.GetAllReplicas(), config_.GetSelfInfo(), config_.GetConfigData()), 
+      replica_communicator_, system_info_
+    );
 }
 
 // Receive the pre-prepare message from the primary.
@@ -369,6 +389,30 @@ int Commitment::PostProcessExecutedMsg() {
 
 DuplicateManager* Commitment::GetDuplicateManager() {
   return duplicate_manager_.get();
+}
+    
+int Commitment::ProcessCrossShardConsensusMessage(std::unique_ptr<Context> context, 
+                                                  std::unique_ptr<Request> request) { 
+  
+  if (!shard_consensus_manager_) {
+    shard_consensus_manager_ = CreateShardConsensusManager();
+  } 
+
+  if (request->type() == Request::TYPE_2PC_NEW_TXNS) { 
+    system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id());
+  }
+
+  if (request->type() == Request::TYPE_2PC_PREPARE) { 
+
+    system_info_->SetCrossShardPrimaryId(request->sender_id());
+
+    shard_consensus_manager_->SetCommitCallback([this](std::unique_ptr<Request> req, std::unique_ptr<Context> context) { 
+      std::cout << "[2PC] Executing commit callback" << std::endl;
+      BeginPBFT(std::move(req), std::move(context));
+    });
+  } 
+
+  return shard_consensus_manager_->ConsensusCommit(std::move(context), std::move(request));
 }
 
 }  // namespace resdb

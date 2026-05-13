@@ -37,6 +37,7 @@ enum TransactionStatue {
   EXECUTED = 4,
 };
 
+
 struct RequestInfo {
   std::unique_ptr<Request> request;
   SignatureInfo signature;
@@ -128,7 +129,7 @@ class TransactionCollector {
   std::map<std::string, std::list<std::unique_ptr<RequestInfo>>>
       data_[Request::NUM_OF_TYPE];
   std::vector<std::unique_ptr<RequestInfo>> prepared_proof_;
-  AtomicUniquePtr<RequestInfo> atomic_mian_request_;
+  AtomicUniquePtr<RequestInfo> atomic_main_request_;
   std::atomic<TransactionStatue> status_ = TransactionStatue::None;
   bool enable_viewchange_;
   std::mutex mutex_;

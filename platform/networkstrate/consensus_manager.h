@@ -36,7 +36,7 @@ namespace resdb {
 // like PBFT to commit.
 class ConsensusManager : public ServiceInterface {
  public:
-  ConsensusManager(const ResDBConfig& config);
+  ConsensusManager(const ResDBConfig& config, bool passive = false);
   virtual ~ConsensusManager();
 
   // Process a request receied from ResDBServer.

@@ -45,18 +45,16 @@ namespace twopc {
 
 class MessageManager {
  public:
-  MessageManager(const ResDBConfig& config,
-                 std::unique_ptr<TransactionManager> transaction_manager,
-                 CheckPointManager* checkpoint_manager,
-                 SystemInfo* system_info);
+  MessageManager(const ResDBConfig& config, SystemInfo* system_info);
   ~MessageManager();
 
   absl::StatusOr<uint64_t> AssignNextSeq();
 
   int64_t GetCurrentPrimary() const;
-  uint64_t GetMinExecutCandidateSeq();
   void SetNextSeq(uint64_t seq);
   int64_t GetNextSeq();
+
+  void SetConsensusCallback(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> callback);
 
   // Add commit messages and return the number of messages have been received.
   // The commit messages only include post(pre-prepare), prepare and commit
@@ -65,7 +63,7 @@ class MessageManager {
   // If there are enough messages and the state is changed after adding the
   // message, return 1, otherwise return 0. Return -2 if the request is not
   // valid.
-  CollectorResultCode AddConsensusMsg(const SignatureInfo& signature,
+  CollectorResultCode AddConsensusMsg(std::unique_ptr<Context> context,
                                       std::unique_ptr<Request> request);
 
   // Obtain the request that has been executed from Executor.
@@ -78,8 +76,6 @@ class MessageManager {
   // if the request has been prepared, having received 2f+1
   // pre-prepare messages.
   std::vector<RequestInfo> GetPreparedProof(uint64_t seq);
-
-  void SetNextCommitSeq(int seq);
 
   // =============  System information ========
   // Obtain the current replica list.
@@ -99,12 +95,6 @@ class MessageManager {
 
   bool IsPreapared(uint64_t seq);
 
-  uint64_t GetHighestPreparedSeq();
-
-  void SetHighestPreparedSeq(uint64_t seq);
-
-  void SetDuplicateManager(DuplicateManager* manager);
-
   void SendResponse(std::unique_ptr<Request> request);
 
   LockFreeCollectorPool* GetCollectorPool();
@@ -120,16 +110,16 @@ class MessageManager {
   ResDBConfig config_;
   uint64_t next_seq_ = 1;
 
+  std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> consensus_func_; 
+
   LockFreeQueue<BatchUserResponse> queue_;
   ChainState* txn_db_;
   SystemInfo* system_info_;
-  CheckPointManager* checkpoint_manager_;
   std::map<uint64_t, std::vector<std::unique_ptr<RequestInfo>>>
       committed_proof_;
   std::map<uint64_t, Request> committed_data_;
 
   std::mutex data_mutex_, seq_mutex_;
-  std::unique_ptr<TransactionExecutor> transaction_executor_;
   std::unique_ptr<LockFreeCollectorPool> collector_pool_;
 
   Stats* global_stats_;

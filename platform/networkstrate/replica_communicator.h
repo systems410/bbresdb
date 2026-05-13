@@ -54,6 +54,8 @@ class ReplicaCommunicator {
   virtual void BroadCast(const google::protobuf::Message& message);
 
   virtual void SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id);
+  
+  virtual void SendMessageTo(const google::protobuf::Message& message, const std::set<uint32_t>& replicas);  
 
   // Sends to all but self
   virtual void SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id, const ReplicaInfo& self);

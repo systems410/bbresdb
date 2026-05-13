@@ -111,6 +111,7 @@ cc_library(
         "//platform/networkstrate:replica_communicator",
         "//platform/proto:resdb_cc_proto",
         "//platform/statistic:stats",
+        "//platform/consensus/ordering/2pc:consensus_manager_2pc",
     ],
 )
 

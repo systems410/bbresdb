@@ -118,6 +118,14 @@ uint32_t ResDBConfig::GetNumShards() const {
   return shard_ids_.size(); 
 } 
 
+std::optional<ReplicaInfo> ResDBConfig::GetInfoOfReplica(uint32_t id) const { 
+  for (const auto& info : all_replicas_) { 
+    if (info.id() == id) { 
+      return info; 
+    }
+  }
+  return std::nullopt; 
+}
 
 KeyInfo ResDBConfig::GetPrivateKey() const { return private_key_; }
 
@@ -159,6 +167,11 @@ size_t ResDBConfig::GetReplicaNum(uint32_t shard_id) const
 
 int ResDBConfig::GetMinDataReceiveNum() const {
   int f = (GetReplicaNumInSelfShard()) / 3;
+  return std::max(2 * f + 1, 1);
+}
+
+int ResDBConfig::GetMinDataReceiveNum(uint32_t num_replicas) const {
+  int f = (num_replicas) / 3;
   return std::max(2 * f + 1, 1);
 }
 

@@ -31,17 +31,16 @@ namespace twopc
 {
 Commitment::Commitment(const ResDBConfig& config,
                        MessageManager* message_manager,
-                       ReplicaCommunicator* replica_communicator,
-                       SignatureVerifier* verifier)
+                       ReplicaCommunicator* replica_communicator, 
+                       SystemInfo* info) 
     : config_(config),
       message_manager_(message_manager),
       stop_(false),
-      replica_communicator_(replica_communicator),
-      verifier_(verifier) {
+      replica_communicator_(replica_communicator), 
+      system_info_(info) {
   executed_thread_ = std::thread(&Commitment::PostProcessExecutedMsg, this);
   global_stats_ = Stats::GetGlobalStats();
   duplicate_manager_ = std::make_unique<DuplicateManager>(config);
-  message_manager_->SetDuplicateManager(duplicate_manager_.get());
 
   global_stats_->SetProps(
       config_.GetSelfInfo().id(), config_.GetSelfInfo().ip(),
@@ -56,13 +55,6 @@ Commitment::~Commitment() {
     executed_thread_.join();
   }
 }
-
-void Commitment::SetPreVerifyFunc(
-    std::function<bool(const Request& request)> func) {
-  pre_verify_func_ = func;
-}
-
-void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 
 // Send a prepare request to each replica 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
@@ -80,39 +72,12 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2;
   }
 
-  if (config_.GetSelfInfo().id() != message_manager_->GetCurrentPrimary()) {
-    LOG(INFO) << "NOT PRIMARY, Primary is "
-              << message_manager_->GetCurrentPrimary();
-    replica_communicator_->SendMessage(*user_request,
-                                       message_manager_->GetCurrentPrimary());
-    {
-      std::lock_guard<std::mutex> lk(rc_mutex_);
-      request_complained_.push(
-          std::make_pair(std::move(context), std::move(user_request)));
-    }
-
-    return -3;
-  }
-
-  // check signatures
-  bool valid = verifier_->VerifyMessage(user_request->data(),
-                                        user_request->data_signature());
-  if (!valid) {
-    LOG(ERROR) << "request is not valid:"
-               << user_request->data_signature().DebugString();
-    LOG(ERROR) << " msg:" << user_request->data().size();
-    return -2;
-  }
-
-  if (pre_verify_func_ && !pre_verify_func_(*user_request)) {
-    LOG(ERROR) << " check by the user func fail";
-    return -2;
-  }
 
   global_stats_->IncClientRequest();
   if (duplicate_manager_->CheckAndAddProposed(user_request->hash())) {
     return -2;
   }
+
   auto seq = message_manager_->AssignNextSeq();
 
   // Artificially make the primary stop proposing new trasactions.
@@ -134,16 +99,16 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   }
 
   global_stats_->RecordStateTime("request");
-  auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id());
+  auto req_cpy = NewRequest(Request::TYPE_2PC_NEW_TXNS, *user_request, user_request->sender_id());
   req_cpy->set_current_view(message_manager_->GetCurrentView());
   req_cpy->set_seq(*seq);
 
-  CollectorResultCode ret = message_manager_->AddConsensusMsg(context->signature, std::move(req_cpy));
+  CollectorResultCode ret = message_manager_->AddConsensusMsg(std::move(context), std::move(req_cpy));
   if (ret == CollectorResultCode::INVALID) { 
     return -2; 
   }
 
-  user_request->set_type(Request::TYPE_PREPARE);
+  user_request->set_type(Request::TYPE_2PC_PREPARE);
   user_request->set_current_view(message_manager_->GetCurrentView());
   user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
@@ -151,7 +116,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_primary_id(config_.GetSelfInfo().id());
 
   std::cout << "[2PC] Commitment::ProcessNewRequest: Broadcasting prepare message" << std::endl;
-  replica_communicator_->BroadCast(*user_request);
+  replica_communicator_->SendMessageTo(*user_request, GetShardPrimaryIds());
 
   return 0;
 }
@@ -163,44 +128,6 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
-  if (request->is_recovery()) {
-    if (message_manager_->GetNextSeq() == 0 ||
-        request->seq() == message_manager_->GetNextSeq()) {
-      message_manager_->SetNextSeq(request->seq() + 1);
-      while (!pending_recovery_.empty()) {
-        LOG(ERROR) << " pending size:" << pending_recovery_.size()
-                   << " first:" << pending_recovery_.begin()->first
-                   << " next:" << message_manager_->GetNextSeq();
-        if (pending_recovery_.begin()->first <=
-            message_manager_->GetNextSeq()) {
-          if (pending_recovery_.begin()->first ==
-              message_manager_->GetNextSeq()) {
-            message_manager_->SetNextSeq(pending_recovery_.begin()->first + 1);
-            message_manager_->AddConsensusMsg(
-                pending_recovery_.begin()->second.first->signature,
-                std::move(pending_recovery_.begin()->second.second));
-          }
-          pending_recovery_.erase(pending_recovery_.begin());
-        } else {
-          break;
-        }
-      }
-
-    } else if (request->seq() > message_manager_->GetNextSeq()) {
-      uint64_t seq = request->seq();
-      pending_recovery_[seq] =
-          std::make_pair(std::move(context), std::move(request));
-      return 0;
-    } else if (!request->force_recovery()) {
-      LOG(ERROR) << " recovery request not valid:"
-                 << " current seq:" << message_manager_->GetNextSeq()
-                 << " data seq:" << request->seq();
-      return 0;
-    }
-    request->set_force_recovery(false);
-    return message_manager_->AddConsensusMsg(context->signature,
-                                             std::move(request));
-  }
 
   if (request->sender_id() != message_manager_->GetCurrentPrimary()) {
     LOG(ERROR) << "the request is not from primary. sender:"
@@ -208,46 +135,27 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
     return -2;
   }
 
-
   if (request->sender_id() != config_.GetSelfInfo().id()) {
-    if (pre_verify_func_ && !pre_verify_func_(*request)) {
-      LOG(ERROR) << " check by the user func fail";
-      return -2;
-    }
-    // global_stats_->GetTransactionDetails(std::move(request));
     BatchUserRequest batch_request;
     batch_request.ParseFromString(request->data());
     batch_request.clear_createtime();
     std::string data;
     batch_request.SerializeToString(&data);
-    // check signatures
-    bool valid =
-        verifier_->VerifyMessage(request->data(), request->data_signature());
-    if (!valid) {
-      LOG(ERROR) << "request is not valid:"
-                 << request->data_signature().DebugString();
-      LOG(ERROR) << " msg:" << request->data().size();
-      return -2;
-    }
-    if (duplicate_manager_->CheckAndAddProposed(request->hash())) {
-      LOG(INFO) << "The request is already proposed, reject";
-      return -2;
-    }
   }
 
   global_stats_->IncPropose();
   global_stats_->RecordStateTime("pre-prepare");
   std::unique_ptr<Request> prepare_request = NewRequest(
-      Request::TYPE_PREPARE, *request, config_.GetSelfInfo().id());
+      Request::TYPE_2PC_PREPARE, *request, config_.GetSelfInfo().id());
   prepare_request->clear_data();
 
   // Add request to message_manager.
   // If it has received enough same requests(2f+1), broadcast the prepare
   // message.
   CollectorResultCode ret =
-      message_manager_->AddConsensusMsg(context->signature, std::move(request));
+      message_manager_->AddConsensusMsg(std::move(context), std::move(request));
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    replica_communicator_->BroadCast(*prepare_request);
+    replica_communicator_->SendMessageTo(*prepare_request, GetShardPrimaryIds());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
@@ -255,6 +163,11 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
 int Commitment::ProcessCommitAckMsg(std::unique_ptr<Context> context, std::unique_ptr<Request> request) { 
   return 0; 
 }
+
+std::set<uint32_t> Commitment::GetShardPrimaryIds() { 
+  return system_info_->GetAllShardPrimaryIds(); 
+}
+
 
 int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
@@ -266,23 +179,19 @@ int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
     return -2;
   }
   uint64_t seq = request->seq();
-  if (request->is_recovery()) {
-    return message_manager_->AddConsensusMsg(context->signature,
-                                             std::move(request));
-  }
 
   std::unique_ptr<Request> global_decision = NewRequest(
-      Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id() 
+      Request::TYPE_2PC_COMMIT, *request, config_.GetSelfInfo().id() 
   );
 
   CollectorResultCode ret =
-      message_manager_->AddConsensusMsg(context->signature, std::move(request));
+      message_manager_->AddConsensusMsg(std::move(context), std::move(request));
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
     // We have received all the commits we need. broadcast the global descision 
     // Add request to message_manager.
     std::cout << "[2PC] Commitment::ProcessVoteMsg: Broadcasting global decision" << std::endl;
-    replica_communicator_->BroadCast(*global_decision);
+    replica_communicator_->SendMessageTo(*global_decision, GetShardPrimaryIds());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 } 
@@ -294,38 +203,17 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
-  if (request->is_recovery()) {
-    uint64_t seq = request->seq();
-    CollectorResultCode ret = message_manager_->AddConsensusMsg(
-        context->signature, std::move(request));
-    if (ret == CollectorResultCode::STATE_CHANGED) {
-      if (message_manager_->GetHighestPreparedSeq() < seq) {
-        message_manager_->SetHighestPreparedSeq(seq);
-      }
-    }
-    return ret;
-  }
-
   int64_t sender = request->sender_id(); 
 
   std::unique_ptr<Request> commit_vote = NewRequest(
-      Request::TYPE_VOTE_COMMIT, *request, config_.GetSelfInfo().id());
+      Request::TYPE_2PC_VOTE_COMMIT, *request, config_.GetSelfInfo().id());
 
-  CollectorResultCode ret = message_manager_->AddConsensusMsg(context->signature, std::move(request));
+  CollectorResultCode ret = message_manager_->AddConsensusMsg(std::move(context), std::move(request));
   if (ret == CollectorResultCode::INVALID) { 
     return ret; 
   }
 
   commit_vote->mutable_data_signature()->Clear();
-  // If need qc, sign the data
-  if (need_qc_ && verifier_) {
-    auto signature_or = verifier_->SignMessage(commit_vote->hash());
-    if (!signature_or.ok()) {
-      LOG(ERROR) << "Sign message fail";
-      return -2;
-    }
-    *commit_vote->mutable_data_signature() = *signature_or;
-  }
 
   global_stats_->RecordStateTime("prepare");
 
@@ -345,17 +233,13 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     return -2;
   }
   uint64_t seq = request->seq();
-  if (request->is_recovery()) {
-    return message_manager_->AddConsensusMsg(context->signature,
-                                             std::move(request));
-  }
 
   int64_t sender = request->sender_id(); 
 
-  std::unique_ptr<Request> ack = NewRequest(Request::TYPE_COMMIT_ACK, 
+  std::unique_ptr<Request> ack = NewRequest(Request::TYPE_2PC_COMMIT_ACK, 
                                         *request, config_.GetSelfInfo().id());
   CollectorResultCode ret =
-      message_manager_->AddConsensusMsg(context->signature, std::move(request));
+      message_manager_->AddConsensusMsg(std::move(context), std::move(request));
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
     global_stats_->RecordStateTime("commit");

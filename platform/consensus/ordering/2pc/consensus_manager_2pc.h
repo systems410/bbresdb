@@ -37,9 +37,9 @@ namespace twopc {
 
 class ConsensusManager2PC : public ConsensusManager {
  public:
-  ConsensusManager2PC(const ResDBConfig& config,
-                       std::unique_ptr<TransactionManager> executor,
-                       std::unique_ptr<CustomQuery> query_executor = nullptr);
+  ConsensusManager2PC(const ResDBConfig& config, ReplicaCommunicator* communicator, 
+                      SystemInfo* info);
+
   virtual ~ConsensusManager2PC() = default;
 
   int ConsensusCommit(std::unique_ptr<Context> context,
@@ -49,52 +49,33 @@ class ConsensusManager2PC : public ConsensusManager {
   uint32_t GetPrimary() override;
   uint32_t GetVersion() override;
 
-  void SetPrimary(uint32_t primary, uint64_t version) override;
+  void SetPrimary(uint32_t primary);
 
   void Start() override;
   void SetupPerformanceDataFunc(std::function<std::string()> func);
 
-  void SetPreVerifyFunc(std::function<bool(const Request&)>);
-  void SetNeedCommitQC(bool need_qc);
+  void SetCommitCallback(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> commit_callback);
 
-  int ProcessRecoveryData(std::unique_ptr<Context> context,
-                          std::unique_ptr<Request> request);
-
-  int ProcessRecoveryDataResponse(std::unique_ptr<Context> context,
-                                  std::unique_ptr<Request> request);
 
  protected:
   int InternalConsensusCommit(std::unique_ptr<Context> context,
                               std::unique_ptr<Request> request);
   void AddPendingRequest(std::unique_ptr<Context> context,
                          std::unique_ptr<Request> request);
-  void AddComplainedRequest(std::unique_ptr<Context> context,
-                            std::unique_ptr<Request> request);
+
   absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
   PopPendingRequest();
-  absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-  PopComplainedRequest();
-
-  void RemoteRecoveryProcess();
 
  protected:
-  std::unique_ptr<SystemInfo> system_info_;
-  std::unique_ptr<CheckPointManager> checkpoint_manager_;
+  SystemInfo* system_info_;
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
-  std::unique_ptr<Query> query_;
   std::unique_ptr<ResponseManager> response_manager_;
   std::unique_ptr<PerformanceManager> performance_manager_;
-  std::unique_ptr<ViewChangeManager> view_change_manager_;
-  std::unique_ptr<Recovery> recovery_;
   Stats* global_stats_;
   std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
       request_pending_;
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_complained_;
   std::mutex mutex_;
-  std::thread recovery_thread_;
-  LockFreeQueue<Request> recovery_queue_;
 };
 
 } // namespace 2pc

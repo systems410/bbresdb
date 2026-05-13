@@ -66,6 +66,9 @@ class ResDBConfig {
   // The minimum number of messages that replicas have to receive after jumping
   // to the next status.. 2f+1
   int GetMinDataReceiveNum() const;
+
+  int GetMinDataReceiveNum(uint32_t num_replicas) const;
+
   // The max malicious replicas to be tolerated (the number of f).
   size_t GetMaxMaliciousReplicaNum() const;
   // const int GetMaxMaliciousNum() const;
@@ -133,6 +136,8 @@ class ResDBConfig {
   void SetViewchangeCommitTimeout(uint64_t timeout_ms);
 
   uint32_t GetNumShards() const; 
+
+  std::optional<ReplicaInfo> GetInfoOfReplica(uint32_t id) const;
 
  private:
 

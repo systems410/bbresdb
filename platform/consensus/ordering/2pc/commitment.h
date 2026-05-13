@@ -35,8 +35,7 @@ namespace twopc
 class Commitment {
  public:
   Commitment(const ResDBConfig& config, MessageManager* message_manager,
-             ReplicaCommunicator* replica_communicator,
-             SignatureVerifier* verifier);
+             ReplicaCommunicator* replica_communicator, SystemInfo* info);
   virtual ~Commitment();
 
   virtual int ProcessNewRequest(std::unique_ptr<Context> context,
@@ -60,12 +59,6 @@ class Commitment {
 
   int ProcessCommitAckMsg(std::unique_ptr<Context> context, std::unique_ptr<Request> request);
 
-  void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
-  void SetNeedCommitQC(bool need_qc);
-
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_complained_;
-
   std::mutex rc_mutex_;
 
   DuplicateManager* GetDuplicateManager();
@@ -73,23 +66,19 @@ class Commitment {
  protected:
   virtual int PostProcessExecutedMsg();
 
+  std::set<uint32_t> GetShardPrimaryIds(); 
+
  protected:
   ResDBConfig config_;
   MessageManager* message_manager_;
+  SystemInfo* system_info_; 
   std::thread executed_thread_;
   std::atomic<bool> stop_;
   ReplicaCommunicator* replica_communicator_;
 
-  SignatureVerifier* verifier_;
   Stats* global_stats_;
 
-  std::function<bool(const Request& request)> pre_verify_func_;
-  bool need_qc_ = false;
-
   std::mutex mutex_;
-  std::map<uint64_t,
-           std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      pending_recovery_;
   std::unique_ptr<DuplicateManager> duplicate_manager_;
 };
 

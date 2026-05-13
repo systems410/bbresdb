@@ -28,51 +28,19 @@ namespace resdb {
 namespace twopc {
 
 MessageManager::MessageManager(
-    const ResDBConfig& config,
-    std::unique_ptr<TransactionManager> transaction_manager,
-    CheckPointManager* checkpoint_manager, SystemInfo* system_info)
+    const ResDBConfig& config, SystemInfo* system_info)
     : config_(config),
       queue_("executed"),
       system_info_(system_info),
-      checkpoint_manager_(checkpoint_manager),
-      transaction_executor_(std::make_unique<TransactionExecutor>(
-          config,
-          [&](std::unique_ptr<Request> request,
-              std::unique_ptr<BatchUserResponse> resp_msg) {
-            if (request->is_recovery()) {
-              if (checkpoint_manager_) {
-                checkpoint_manager_->AddCommitData(std::move(request));
-              }
-              return;
-            }
-            resp_msg->set_proxy_id(request->proxy_id());
-            resp_msg->set_seq(request->seq());
-            resp_msg->set_current_view(request->current_view());
-            resp_msg->set_primary_id(GetCurrentPrimary());
-            if (transaction_executor_->NeedResponse() &&
-                resp_msg->proxy_id() != 0) {
-              queue_.Push(std::move(resp_msg));
-            }
-            if (checkpoint_manager_) {
-              checkpoint_manager_->AddCommitData(std::move(request));
-            }
-          },
-          system_info_, std::move(transaction_manager))),
       collector_pool_(std::make_unique<LockFreeCollectorPool>(
-          "txn", config_.GetMaxProcessTxn(), transaction_executor_.get(),
-          config_.GetConfigData().enable_viewchange())) {
+          "txn", config_.GetMaxProcessTxn())) {
   global_stats_ = Stats::GetGlobalStats();
-  transaction_executor_->SetSeqUpdateNotifyFunc(
-      [&](uint64_t seq) { collector_pool_->Update(seq - 1); });
-  checkpoint_manager_->SetExecutor(transaction_executor_.get());
-  checkpoint_manager_->SetResetExecute(
-      [&](uint64_t seq) { SetNextCommitSeq(seq); });
 }
 
-MessageManager::~MessageManager() {
-  if (transaction_executor_) {
-    transaction_executor_->Stop();
-  }
+MessageManager::~MessageManager() {}
+
+void MessageManager::SetConsensusCallback(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> callback) { 
+  consensus_func_ = std::move(callback);
 }
 
 std::unique_ptr<BatchUserResponse> MessageManager::GetResponseMsg() {
@@ -80,7 +48,7 @@ std::unique_ptr<BatchUserResponse> MessageManager::GetResponseMsg() {
 }
 
 int64_t MessageManager::GetCurrentPrimary() const {
-  return system_info_->GetPrimaryId();
+  return system_info_->GetCrossShardPrimaryId();
 }
 
 uint64_t MessageManager ::GetCurrentView() const {
@@ -97,14 +65,6 @@ int64_t MessageManager::GetNextSeq() { return next_seq_; }
 
 absl::StatusOr<uint64_t> MessageManager::AssignNextSeq() {
   std::unique_lock<std::mutex> lk(seq_mutex_);
-  uint32_t max_executed_seq = transaction_executor_->GetMaxPendingExecutedSeq();
-  global_stats_->SeqGap(next_seq_ - max_executed_seq);
-  if (next_seq_ - max_executed_seq >
-      static_cast<uint64_t>(config_.GetMaxProcessTxn())) {
-    // LOG(ERROR) << "next_seq_: " << next_seq_ << " max_executed_seq: " <<
-    // max_executed_seq;
-    return absl::InvalidArgumentError("Seq has been used up.");
-  }
   return next_seq_++;
 }
 
@@ -127,11 +87,6 @@ bool MessageManager::IsValidMsg(const Request& request) {
     return false;
   }
 
-  if (static_cast<uint64_t>(request.seq()) <
-      transaction_executor_->GetMaxPendingExecutedSeq()) {
-    return false;
-  }
-
   return true;
 }
 
@@ -140,7 +95,7 @@ bool MessageManager::MayConsensusChangeStatus(
     bool ret) {
   switch (type) {
     // Have the participant switch directly to ready commit on the prepare msg as we assume no aborts 
-    case Request::TYPE_PREPARE: 
+    case Request::TYPE_2PC_PREPARE: 
       // the coordinator may also be a participant, so dont let them switch to ready commit until they have enough votes
       if (config_.GetSelfInfo().id() != GetCurrentPrimary() && *status == TransactionStatue::None) { 
         TransactionStatue old_status = TransactionStatue::None;
@@ -150,7 +105,7 @@ bool MessageManager::MayConsensusChangeStatus(
       }
       break; 
     // Have the coordinator enter a READY PREPARE state on new txns 
-    case Request::TYPE_NEW_TXNS: 
+    case Request::TYPE_2PC_NEW_TXNS: 
       if (*status == TransactionStatue::None) { 
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
@@ -161,8 +116,8 @@ bool MessageManager::MayConsensusChangeStatus(
 
     // Received a COMMIT VOTE, if we have received votes for all replicas, 
     // transition into READY COMMIT state  
-    case Request::TYPE_VOTE_COMMIT: 
-      if (*status == TransactionStatue::READY_PREPARE && config_.GetReplicaNumInSelfShard() <= received_count) {
+    case Request::TYPE_2PC_VOTE_COMMIT: 
+      if (*status == TransactionStatue::READY_PREPARE && config_.GetMinDataReceiveNum(system_info_->GetAllShardPrimaryIds().size()) <= received_count) {
         TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::READY_COMMIT,
@@ -171,7 +126,7 @@ bool MessageManager::MayConsensusChangeStatus(
       break;
 
     // Received global decision to commit. If ready to commit, transition to READY EXECUTE 
-    case Request::TYPE_COMMIT:
+    case Request::TYPE_2PC_COMMIT:
       if (*status == TransactionStatue::READY_COMMIT) { 
         TransactionStatue old_status = TransactionStatue::READY_COMMIT;
         return status->compare_exchange_strong(
@@ -190,7 +145,7 @@ bool MessageManager::MayConsensusChangeStatus(
 // If there are enough messages and the state is changed after adding the
 // message, return 1, otherwise return 0. Return -2 if the request is not valid.
 CollectorResultCode MessageManager::AddConsensusMsg(
-    const SignatureInfo& signature, std::unique_ptr<Request> request) {
+    std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
   if (request == nullptr || !IsValidMsg(*request)) {
     LOG(ERROR) << " msg not invalid";
     return CollectorResultCode::INVALID;
@@ -200,20 +155,16 @@ CollectorResultCode MessageManager::AddConsensusMsg(
   uint64_t seq = request->seq();
   int resp_received_count = 0;
   int proxy_id = request->proxy_id();
-  if (checkpoint_manager_->IsCommitted(seq)) {
-    LOG(ERROR) << " seq:" << seq << " type:" << type << " has been committed";
-    return CollectorResultCode::STATE_CHANGED;
-  }
 
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
-      std::move(request), signature, type == Request::TYPE_COMMIT,
+      std::move(request), std::move(context), type == Request::TYPE_2PC_PREPARE,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           std::atomic<TransactionStatue>* status, bool force) {
         if (MayConsensusChangeStatus(type, received_count, status, force)) {
           resp_received_count = 1;
         }
-      });
+      }, consensus_func_);
   if (ret == 1) {
     SetLastCommittedTime(proxy_id);
   } else if (ret != 0) {
@@ -235,18 +186,6 @@ int MessageManager::GetReplicaState(ReplicaState* state) {
   return 0;
 }
 
-Storage* MessageManager::GetStorage() {
-  return transaction_executor_->GetStorage();
-}
-
-void MessageManager::SetNextCommitSeq(int seq) {
-  LOG(ERROR) << " set next commit seq:" << seq;
-  SetNextSeq(seq);
-  SetHighestPreparedSeq(seq);
-  collector_pool_->Reset(seq);
-  checkpoint_manager_->SetLastCommit(seq - 1);
-  return transaction_executor_->SetPendingExecutedSeq(seq);
-}
 
 void MessageManager::SetLastCommittedTime(uint64_t proxy_id) {
   lct_lock_.lock();
@@ -265,18 +204,6 @@ bool MessageManager::IsPreapared(uint64_t seq) {
   return collector_pool_->GetCollector(seq)->IsPrepared();
 }
 
-uint64_t MessageManager::GetHighestPreparedSeq() {
-  return checkpoint_manager_->GetHighestPreparedSeq();
-}
-
-void MessageManager::SetHighestPreparedSeq(uint64_t seq) {
-  return checkpoint_manager_->SetHighestPreparedSeq(seq);
-}
-
-void MessageManager::SetDuplicateManager(DuplicateManager* manager) {
-  transaction_executor_->SetDuplicateManager(manager);
-}
-
 void MessageManager::SendResponse(std::unique_ptr<Request> request) {
   std::unique_ptr<BatchUserResponse> response =
       std::make_unique<BatchUserResponse>();
@@ -287,9 +214,6 @@ void MessageManager::SendResponse(std::unique_ptr<Request> request) {
   response->set_seq(request->seq());
   response->set_current_view(GetCurrentView());
   response->set_primary_id(GetCurrentPrimary());
-  if (transaction_executor_->NeedResponse() && response->proxy_id() != 0) {
-    queue_.Push(std::move(response));
-  }
 }
 
 LockFreeCollectorPool* MessageManager::GetCollectorPool() {

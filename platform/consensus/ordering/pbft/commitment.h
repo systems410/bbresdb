@@ -22,10 +22,12 @@
 #include "platform/common/queue/batch_queue.h"
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/execution/duplicate_manager.h"
+#include "platform/consensus/execution/system_info.h"
 #include "platform/consensus/ordering/pbft/message_manager.h"
 #include "platform/consensus/ordering/pbft/response_manager.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
+#include "platform/consensus/ordering/2pc/consensus_manager_2pc.h"
 
 namespace resdb {
 
@@ -33,11 +35,11 @@ class Commitment {
  public:
   Commitment(const ResDBConfig& config, MessageManager* message_manager,
              ReplicaCommunicator* replica_communicator,
-             SignatureVerifier* verifier);
+             SignatureVerifier* verifier, SystemInfo* system_info);
   virtual ~Commitment();
 
   virtual int ProcessNewRequest(std::unique_ptr<Context> context,
-                                std::unique_ptr<Request> user_request);
+                                std::unique_ptr<Request> user_request); 
 
   virtual int ProcessProposeMsg(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> request);
@@ -49,6 +51,8 @@ class Commitment {
   void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
   void SetNeedCommitQC(bool need_qc);
 
+  int ProcessCrossShardConsensusMessage(std::unique_ptr<Context>, std::unique_ptr<Request>);
+
   std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
       request_complained_;
 
@@ -59,9 +63,16 @@ class Commitment {
  protected:
   virtual int PostProcessExecutedMsg();
 
+  std::unique_ptr<twopc::ConsensusManager2PC> CreateShardConsensusManager(); 
+
+  int BeginPBFT(std::unique_ptr<Request>, std::unique_ptr<Context>); 
+
+
  protected:
   ResDBConfig config_;
+  SystemInfo* system_info_; 
   MessageManager* message_manager_;
+  std::unique_ptr<twopc::ConsensusManager2PC> shard_consensus_manager_ = nullptr; 
   std::thread executed_thread_;
   std::atomic<bool> stop_;
   ReplicaCommunicator* replica_communicator_;
