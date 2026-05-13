@@ -75,7 +75,6 @@ int TransactionCollector::AddRequest(
         call_back,
       std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> execute_func) {
   if (request == nullptr) {
-    std::cout << "[2PC] request == nullptr" << std::endl;
     return -2;
   }
 
@@ -84,7 +83,6 @@ int TransactionCollector::AddRequest(
   int type = request->type();
   uint64_t seq = request->seq();
   if (is_committed_) {
-    std::cout << "[2PC] sequence number: " << seq << " is committed" << std::endl;
     return -2;
   }
   if (status_.load() == EXECUTED) {
@@ -94,7 +92,6 @@ int TransactionCollector::AddRequest(
   if (seq_ != static_cast<uint64_t>(request->seq())) {
     LOG(ERROR) << "data invalid, seq not the same:" << seq
                << " collect seq:" << seq_;
-    std::cout << "[2PC] invalid seq" << std::endl;
     return -2;
   }
 
@@ -106,7 +103,6 @@ int TransactionCollector::AddRequest(
     int ret = atomic_main_request_.Set(request_info);
     if (!ret) {
       other_main_request_.insert(std::move(request_info));
-      std::cout << "[2PC] set main fail" << std::endl;
       LOG(ERROR) << "set main request fail: data existed:" << seq
                  << " ret:" << ret;
       return -2;

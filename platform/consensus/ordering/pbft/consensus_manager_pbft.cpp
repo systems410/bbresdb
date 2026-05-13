@@ -205,14 +205,14 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "[PBFT] Type Client Request" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received client request" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
-      std::cout << "[PBFT] Type Response" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received response" << std::endl;
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -220,7 +220,7 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
-      std::cout << "[PBFT] Type New Txns" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received new txns" << std::endl;
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -243,15 +243,15 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PRE_PREPARE:
-      std::cout << "[PBFT] Type Pre Prepare" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received pre-prepare" << std::endl;
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
-      std::cout << "[PBFT] Type Prepare" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received prepare" << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
-      std::cout << "[PBFT] Type Commit" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received commit" << std::endl;
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:
@@ -285,7 +285,6 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
     case Request::TYPE_2PC_VOTE_ABORT: 
     case Request::TYPE_2PC_VOTE_COMMIT: 
     case Request::TYPE_2PC_COMMIT: 
-      std::cout << "[PBFT] Transfering message to 2PC" << std::endl;
       return commitment_->ProcessCrossShardConsensusMessage(std::move(context), 
                                                             std::move(request));
 

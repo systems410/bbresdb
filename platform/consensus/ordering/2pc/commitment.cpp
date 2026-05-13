@@ -115,7 +115,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_sender_shard_id(config_.GetSelfShard()); 
   user_request->set_primary_id(config_.GetSelfInfo().id());
 
-  std::cout << "[2PC] Commitment::ProcessNewRequest: Broadcasting prepare message" << std::endl;
+  std::cout << "[2PC] Commitment::ProcessNewRequest: Broadcasting prepare message to cross shard primaries" << std::endl;
   replica_communicator_->SendMessageTo(*user_request, GetShardPrimaryIds());
 
   return 0;
@@ -190,7 +190,7 @@ int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
   if (ret == CollectorResultCode::STATE_CHANGED) {
     // We have received all the commits we need. broadcast the global descision 
     // Add request to message_manager.
-    std::cout << "[2PC] Commitment::ProcessVoteMsg: Broadcasting global decision" << std::endl;
+    std::cout << "[2PC] Commitment::ProcessVoteMsg: Broadcasting global decision to cross shard primaries" << std::endl;
     replica_communicator_->SendMessageTo(*global_decision, GetShardPrimaryIds());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;

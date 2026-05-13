@@ -407,7 +407,6 @@ int Commitment::ProcessCrossShardConsensusMessage(std::unique_ptr<Context> conte
     system_info_->SetCrossShardPrimaryId(request->sender_id());
 
     shard_consensus_manager_->SetCommitCallback([this](std::unique_ptr<Request> req, std::unique_ptr<Context> context) { 
-      std::cout << "[2PC] Executing commit callback" << std::endl;
       BeginPBFT(std::move(req), std::move(context));
     });
   } 
