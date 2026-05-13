@@ -60,22 +60,13 @@ class ConsensusManager2PC : public ConsensusManager {
  protected:
   int InternalConsensusCommit(std::unique_ptr<Context> context,
                               std::unique_ptr<Request> request);
-  void AddPendingRequest(std::unique_ptr<Context> context,
-                         std::unique_ptr<Request> request);
-
-  absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-  PopPendingRequest();
 
  protected:
   SystemInfo* system_info_;
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
-  std::unique_ptr<ResponseManager> response_manager_;
   std::unique_ptr<PerformanceManager> performance_manager_;
   Stats* global_stats_;
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_pending_;
-  std::mutex mutex_;
 };
 
 } // namespace 2pc

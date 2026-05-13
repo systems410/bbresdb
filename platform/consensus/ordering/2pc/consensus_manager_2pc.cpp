@@ -36,11 +36,6 @@ ConsensusManager2PC::ConsensusManager2PC(const ResDBConfig& config, ReplicaCommu
           config, system_info_)),
       commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
                                                communicator, system_info_)),
-      response_manager_(config_.IsPerformanceRunning()
-                            ? nullptr
-                            : std::make_unique<ResponseManager>(
-                                  config_, GetBroadCastClient(),
-                                  system_info_, GetSignatureVerifier())),
       performance_manager_(config_.IsPerformanceRunning()
                                ? std::make_unique<PerformanceManager>(
                                      config_, GetBroadCastClient(),
@@ -76,25 +71,6 @@ void ConsensusManager2PC::SetPrimary(uint32_t primary) {
   system_info_->SetPrimary(primary);
 }
 
-void ConsensusManager2PC::AddPendingRequest(std::unique_ptr<Context> context,
-                                             std::unique_ptr<Request> request) {
-  std::lock_guard<std::mutex> lk(mutex_);
-  request_pending_.push(std::make_pair(std::move(context), std::move(request)));
-}
-
-absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-ConsensusManager2PC::PopPendingRequest() {
-  std::lock_guard<std::mutex> lk(mutex_);
-  if (request_pending_.empty()) {
-    // LOG(ERROR) << "empty:";
-    return absl::InternalError("No Data.");
-  }
-  auto new_request = std::move(request_pending_.front());
-  request_pending_.pop();
-  return new_request;
-}
-
-// The implementation of PBFT.
 int ConsensusManager2PC::ConsensusCommit(std::unique_ptr<Context> context,
                                           std::unique_ptr<Request> request) {
   LOG(INFO) << "recv impl type:" << request->type() << " "
