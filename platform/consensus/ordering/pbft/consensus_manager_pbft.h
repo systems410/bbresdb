@@ -44,7 +44,7 @@ class ConsensusManagerPBFT : public ConsensusManager {
                        std::unique_ptr<TransactionManager> executor,
                        ReplicaCommunicator* rc, 
                        SystemInfo* system_info,
-                       std::unique_ptr<CustomQuery> query_executor = nullptr);
+                       std::unique_ptr<CustomQuery> query_executor = nullptr); 
 
   virtual ~ConsensusManagerPBFT() = default;
 

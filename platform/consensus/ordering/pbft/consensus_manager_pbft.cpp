@@ -168,7 +168,6 @@ int ConsensusManagerPBFT::ConsensusCommit(std::unique_ptr<Context> context,
         case Request::TYPE_PRE_PREPARE:
         case Request::TYPE_PREPARE:
         case Request::TYPE_COMMIT:
-        case Request::TYPE_2PC_NEW_TXNS: 
           AddPendingRequest(std::move(context), std::move(request));
           return 0;
       }

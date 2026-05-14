@@ -150,6 +150,7 @@ int TransactionCollector::AddRequest(
 }
 
 int TransactionCollector::Commit(ConsensusManager* replica_cm) {  
+  std::cout << "[2PC] TC::Commit" << std::endl;
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
   bool res = status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
@@ -178,6 +179,7 @@ int TransactionCollector::Commit(ConsensusManager* replica_cm) {
              ->add_committed_certs() = sig;
       }
     }
+    main_request->request->set_type(Request::TYPE_NEW_TXNS);
     replica_cm->ConsensusCommit(std::move(main_context->context), std::move(main_request->request));
   } 
   return 0;

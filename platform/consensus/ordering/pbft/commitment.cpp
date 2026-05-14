@@ -94,16 +94,16 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2; 
   }
 
-
+  // SHARD TODO 
   // check signatures
-  bool valid = verifier_->VerifyMessage(user_request->data(),
-                                        user_request->data_signature());
-  if (!valid) {
-    LOG(ERROR) << "request is not valid:"
-               << user_request->data_signature().DebugString();
-    LOG(ERROR) << " msg:" << user_request->data().size();
-    return -2;
-  }
+  // bool valid = verifier_->VerifyMessage(user_request->data(),
+  //                                       user_request->data_signature());
+  // if (!valid) {
+  //   LOG(ERROR) << "request is not valid:"
+  //              << user_request->data_signature().DebugString();
+  //   LOG(ERROR) << " msg:" << user_request->data().size();
+  //   return -2;
+  // }
 
   if (pre_verify_func_ && !pre_verify_func_(*user_request)) {
     LOG(ERROR) << " check by the user func fail";
@@ -221,14 +221,15 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
     std::string data;
     batch_request.SerializeToString(&data);
     // check signatures
-    bool valid =
-        verifier_->VerifyMessage(request->data(), request->data_signature());
-    if (!valid) {
-      LOG(ERROR) << "request is not valid:"
-                 << request->data_signature().DebugString();
-      LOG(ERROR) << " msg:" << request->data().size();
-      return -2;
-    }
+    // SHARD TODO 
+    // bool valid =
+    //     verifier_->VerifyMessage(request->data(), request->data_signature());
+    // if (!valid) {
+    //   LOG(ERROR) << "request is not valid:"
+    //              << request->data_signature().DebugString();
+    //   LOG(ERROR) << " msg:" << request->data().size();
+    //   return -2;
+    // }
     if (duplicate_manager_->CheckAndAddProposed(request->hash())) {
       LOG(INFO) << "The request is already proposed, reject";
       return -2;
@@ -247,6 +248,7 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
   if (ret == CollectorResultCode::STATE_CHANGED) {
+    std::cout << "[PBFT] Sending prepare to shard: " << config_.GetSelfShard() << std::endl;
     replica_communicator_->SendMessageToShard(*prepare_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -255,16 +257,19 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
 // If receive 2f+1 prepare message, broadcast a commit message.
 int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
+  std::cout << "[PBFT] 1" << std::endl;
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
 
+  std::cout << "[PBFT] 2" << std::endl;
   if (request->sender_shard_id() != config_.GetSelfShard()) { 
     LOG(ERROR) << "request does not originate from this shard, reject"; 
     return -2; 
   }
 
+  std::cout << "[PBFT] 3" << std::endl;
   if (request->is_recovery()) {
     uint64_t seq = request->seq();
     CollectorResultCode ret = message_manager_->AddConsensusMsg(
@@ -276,6 +281,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     }
     return ret;
   }
+  std::cout << "[PBFT] 4" << std::endl;
   // global_stats_->IncPrepare();
   std::unique_ptr<Request> commit_request = resdb::NewRequest(
       Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
@@ -286,6 +292,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   uint64_t seq = request->seq();
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
+  std::cout << "[PBFT] 5" << std::endl;
   if (ret == CollectorResultCode::STATE_CHANGED) {
     if (message_manager_->GetHighestPreparedSeq() < seq) {
       message_manager_->SetHighestPreparedSeq(seq);
@@ -302,6 +309,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
       //           << commit_request->data_signature().DebugString();
     }
     global_stats_->RecordStateTime("prepare");
+  std::cout << "[PBFT] 6" << std::endl;
     replica_communicator_->SendMessageToShard(*commit_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;

@@ -78,6 +78,7 @@ class ResponseManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
+  uint32_t GetPrimaryOfShard(uint32_t shard_id); 
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
   void RemoveWaitingResponseRequest(const std::string& hash);
@@ -85,6 +86,8 @@ class ResponseManager {
   void ResponseTimer(std::string hash);
   void MonitoringClientTimeOut();
   std::unique_ptr<Request> GetTimeOutRequest(std::string hash);
+
+  uint32_t GetNextPrimary();
 
  private:
   ResDBConfig config_;
@@ -107,6 +110,9 @@ class ResponseManager {
   sem_t request_sent_signal_;
   uint64_t highest_seq_;
   uint64_t highest_seq_primary_id_;
+
+  std::vector<uint32_t> shard_primaries_; 
+  uint32_t current_shard_primary_idx_; 
 };
 
 } // namespace 2pc 

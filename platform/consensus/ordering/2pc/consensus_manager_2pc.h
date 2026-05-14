@@ -1,5 +1,5 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
+ * ;Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -48,11 +48,6 @@ class ShardedConsensusManager2PC : public ConsensusManager {
         config, system_info_, replica_cm_.get())),
     commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
                                             replica_communicator_, system_info_)),
-    response_manager_(config_.IsPerformanceRunning()
-                          ? nullptr
-                          : std::make_unique<ResponseManager>(
-                                config_, replica_communicator_,
-                                system_info_, GetSignatureVerifier())),
     performance_manager_(config_.IsPerformanceRunning()
                             ? std::make_unique<PerformanceManager>(
                                     config_, replica_communicator_,
@@ -77,7 +72,7 @@ class ShardedConsensusManager2PC : public ConsensusManager {
 
 
   uint32_t GetPrimary() override {
-    return system_info_->GetPrimaryId();
+    return system_info_->GetCrossShardPrimaryId();
   }
 
   uint32_t GetVersion() override {
@@ -85,7 +80,7 @@ class ShardedConsensusManager2PC : public ConsensusManager {
   }
 
   void SetPrimary(uint32_t primary) {
-    system_info_->SetPrimary(primary);
+    system_info_->SetCrossShardPrimaryId(primary);
   }
 
   std::vector<ReplicaInfo> GetReplicas() override {
@@ -109,19 +104,9 @@ class ShardedConsensusManager2PC : public ConsensusManager {
 
     switch (request->type()) {
 
-      case Request::TYPE_CLIENT_REQUEST:
-        std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received client request" << std::endl;
-        if (config_.IsPerformanceRunning()) {
-          return performance_manager_->StartEval();
-        }
-        return response_manager_->NewUserRequest(std::move(context),
-                                                std::move(request));
-
-      // Received by the coordinator. Send the prepare messages to the replicas to get their vote 
-      case Request::TYPE_2PC_NEW_TXNS: {
+      case Request::TYPE_NEW_TXNS: {
         std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received txns message" << std::endl;
-        uint64_t proxy_id = request->proxy_id();
-        std::string hash = request->hash();
+        system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id());
         int ret = commitment_->ProcessNewRequest(std::move(context),
                                                 std::move(request));
         if (ret == -3) {
@@ -140,6 +125,7 @@ class ShardedConsensusManager2PC : public ConsensusManager {
       // Received by all participants. This is where they will respond with their vote 
       case Request::TYPE_2PC_PREPARE:
         std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received prepare message" << std::endl;
+        system_info_->SetCrossShardPrimaryId(request->sender_id());
         return commitment_->ProcessPrepareMsg(std::move(context),
                                               std::move(request));
 
@@ -172,7 +158,6 @@ class ShardedConsensusManager2PC : public ConsensusManager {
   std::unique_ptr<ReplicaCM> replica_cm_; 
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
-  std::unique_ptr<ResponseManager> response_manager_;
   std::unique_ptr<PerformanceManager> performance_manager_;
   Stats* global_stats_;
 

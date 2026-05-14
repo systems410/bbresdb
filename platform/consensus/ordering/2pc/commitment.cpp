@@ -99,7 +99,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   }
 
   global_stats_->RecordStateTime("request");
-  auto req_cpy = NewRequest(Request::TYPE_2PC_NEW_TXNS, *user_request, user_request->sender_id());
+  auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id());
   req_cpy->set_current_view(message_manager_->GetCurrentView());
   req_cpy->set_seq(*seq);
 

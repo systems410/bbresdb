@@ -35,7 +35,7 @@ void ResDBConfig::InitShards(const std::vector<ReplicaInfo>& replicas) {
 ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
                          const ReplicaInfo& self_info,
                          ResConfigData config_data)
-    : ResDBConfig(config_data, self_info, KeyInfo(), CertificateInfo()) {
+    : ResDBConfig(config_data, self_info, KeyInfo(), CertificateInfo(), replicas) {
 }
 
 ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
@@ -43,13 +43,14 @@ ResDBConfig::ResDBConfig(const std::vector<ReplicaInfo>& replicas,
                          const KeyInfo& private_key,
                          const CertificateInfo& public_key_cert_info)
     : ResDBConfig(ResConfigData(), self_info, private_key,
-                  public_key_cert_info) {
+                  public_key_cert_info, replicas) {
 }
 
 ResDBConfig::ResDBConfig(const ResConfigData& config_data,
                          const ReplicaInfo& self_info,
                          const KeyInfo& private_key,
-                         const CertificateInfo& public_key_cert_info)
+                         const CertificateInfo& public_key_cert_info, 
+                         const std::vector<ReplicaInfo>& replicas)
     : config_data_(config_data),
       self_info_(self_info),
       private_key_(private_key),
@@ -64,6 +65,9 @@ ResDBConfig::ResDBConfig(const ResConfigData& config_data,
                 << region.replica_info_size();
       break;
     }
+  }
+  for (const auto& replica : replicas) { 
+    all_replicas_.push_back(replica);
   }
   if (config_data_.view_change_timeout_ms() == 0) {
     config_data_.set_view_change_timeout_ms(viewchange_commit_timeout_ms_);

@@ -86,6 +86,7 @@ class ResponseManager {
 
   uint32_t GetNextPrimary();
 
+private: 
   ResDBConfig config_;
   ReplicaCommunicator* replica_communicator_;
   std::unique_ptr<LockFreeCollectorPool> collector_pool_, context_pool_;

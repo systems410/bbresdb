@@ -107,7 +107,7 @@ bool MessageManager::MayConsensusChangeStatus(
       }
       break; 
     // Have the coordinator enter a READY PREPARE state on new txns 
-    case Request::TYPE_2PC_NEW_TXNS: 
+    case Request::TYPE_NEW_TXNS: 
       if (*status == TransactionStatue::None) { 
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(

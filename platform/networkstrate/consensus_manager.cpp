@@ -52,7 +52,6 @@ ConsensusManager::ConsensusManager(const ResDBConfig& config,
     owned_replica_communicator_ = GetReplicaClient(config_.GetAllReplicas(), true);
     replica_communicator_ = owned_replica_communicator_.get(); 
   } else { 
-    std::cout << "[RC] Using a shared comm" << std::endl;
     replica_communicator_ = rc; 
   }
 
@@ -227,7 +226,6 @@ int ConsensusManager::Dispatch(std::unique_ptr<Context> context,
   if (request->type() == Request::TYPE_HEART_BEAT) {
     return ProcessHeartBeat(std::move(context), std::move(request));
   }
-  std::cout << "[2PC] Made it here? " << std::endl;
   return ConsensusCommit(std::move(context), std::move(request));
 }
 
