@@ -28,8 +28,9 @@ namespace resdb {
 namespace twopc {
 
 MessageManager::MessageManager(
-    const ResDBConfig& config, SystemInfo* system_info)
+    const ResDBConfig& config, SystemInfo* system_info, ConsensusManager* replica_cm)
     : config_(config),
+      replica_cm_(replica_cm),
       queue_("executed"),
       system_info_(system_info),
       collector_pool_(std::make_unique<LockFreeCollectorPool>(
@@ -38,10 +39,6 @@ MessageManager::MessageManager(
 }
 
 MessageManager::~MessageManager() {}
-
-void MessageManager::SetConsensusCallback(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> callback) { 
-  consensus_func_ = std::move(callback);
-}
 
 std::unique_ptr<BatchUserResponse> MessageManager::GetResponseMsg() {
   return queue_.Pop();
@@ -169,7 +166,7 @@ CollectorResultCode MessageManager::AddConsensusMsg(
         if (MayConsensusChangeStatus(type, received_count, status, force)) {
           resp_received_count = 1;
         }
-      }, consensus_func_);
+      }, replica_cm_);
   if (ret == 1) {
     SetLastCommittedTime(proxy_id);
   } else if (ret != 0) {

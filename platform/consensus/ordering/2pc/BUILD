@@ -223,6 +223,7 @@ cc_library(
         "//platform/networkstrate:server_comm",
         "//platform/proto:resdb_cc_proto",
         "//platform/statistic:stats",
+        "//platform/networkstrate:consensus_manager"
     ],
 )
 

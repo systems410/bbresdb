@@ -40,31 +40,42 @@ bool ReplicaExisted(const ReplicaInfo& replica_info,
 
 }  // namespace
 
-ConsensusManager::ConsensusManager(const ResDBConfig& config, bool passive)
+ConsensusManager::ConsensusManager(const ResDBConfig& config, 
+                                   ReplicaCommunicator* rc, 
+                                   SystemInfo* system_info)
     : config_(config), global_stats_(Stats::GetGlobalStats()) {
   if (config_.SignatureVerifierEnabled()) {
     verifier_ = std::make_unique<SignatureVerifier>(
         config_.GetPrivateKey(), config_.GetPublicKeyCertificateInfo());
   }
-  if (!passive) { 
-    bc_client_ = GetReplicaClient(config_.GetAllReplicas(), true);
+  if (rc == nullptr) { 
+    owned_replica_communicator_ = GetReplicaClient(config_.GetAllReplicas(), true);
+    replica_communicator_ = owned_replica_communicator_.get(); 
+  } else { 
+    std::cout << "[RC] Using a shared comm" << std::endl;
+    replica_communicator_ = rc; 
+  }
+
+  if (system_info == nullptr) { 
+    owned_system_info_ = std::make_unique<SystemInfo>(config);
+    system_info_ = owned_system_info_.get(); 
+  } else { 
+    system_info_ = system_info; 
   }
 }
 
 ConsensusManager::~ConsensusManager() {
-  if (bc_client_) { 
-    bc_client_.reset();
+  if (owned_replica_communicator_) { 
+    owned_replica_communicator_.reset();
   }
   Stop();
 }
 
 void ConsensusManager::UpdateBroadCastClient() {
-  bc_client_ = GetReplicaClient(GetReplicas(), true);
+  owned_replica_communicator_ = GetReplicaClient(GetReplicas(), true);
+  replica_communicator_ = owned_replica_communicator_.get(); 
 }
 
-ReplicaCommunicator* ConsensusManager::GetBroadCastClient() {
-  return bc_client_.get();
-}
 
 SignatureVerifier* ConsensusManager::GetSignatureVerifier() {
   return verifier_ == nullptr ? nullptr : verifier_.get();
@@ -216,6 +227,7 @@ int ConsensusManager::Dispatch(std::unique_ptr<Context> context,
   if (request->type() == Request::TYPE_HEART_BEAT) {
     return ProcessHeartBeat(std::move(context), std::move(request));
   }
+  std::cout << "[2PC] Made it here? " << std::endl;
   return ConsensusCommit(std::move(context), std::move(request));
 }
 
@@ -291,7 +303,7 @@ int ConsensusManager::ProcessHeartBeat(std::unique_ptr<Context> context,
     info.set_ip(hb_info.ip());
     info.set_port(hb_info.port());
     info.set_id(hb_info.sender());
-    // bc_client_->Flush(info);
+    // replica_communicator_->Flush(info);
     hb_[hb_info.sender()] = hb_info.hb_version();
     SendHeartBeat();
   }
@@ -327,8 +339,8 @@ std::vector<ReplicaInfo> ConsensusManager::GetAllReplicas() {
 
 void ConsensusManager::BroadCast(const Request& request) {
   int ret = -1; 
-  if (bc_client_) { 
-    ret = bc_client_->SendMessage(request);
+  if (replica_communicator_) { 
+    ret = replica_communicator_->SendMessage(request);
   }
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";
@@ -351,8 +363,8 @@ void ConsensusManager::SendMessage(const google::protobuf::Message& message,
   }
 
   int ret = -1; 
-  if (bc_client_) { 
-    ret = bc_client_->SendMessage(message, target_replica);
+  if (replica_communicator_) { 
+    ret = replica_communicator_->SendMessage(message, target_replica);
   }
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";
@@ -373,8 +385,8 @@ void ConsensusManager::AddNewReplica(const ReplicaInfo& info) {}
 
 void ConsensusManager::AddNewClient(const ReplicaInfo& info) {
   clients_.push_back(info);
-  if (bc_client_) { 
-    bc_client_->UpdateClientReplicas(clients_);
+  if (replica_communicator_) { 
+    replica_communicator_->UpdateClientReplicas(clients_);
   }
 }
 

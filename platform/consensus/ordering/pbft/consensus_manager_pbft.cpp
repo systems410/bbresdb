@@ -28,33 +28,33 @@ namespace resdb {
 
 ConsensusManagerPBFT::ConsensusManagerPBFT(
     const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
-    std::unique_ptr<CustomQuery> query_executor)
-    : ConsensusManager(config),
-      system_info_(std::make_unique<SystemInfo>(config)),
+    ReplicaCommunicator* rc, SystemInfo* system_info, 
+    std::unique_ptr<CustomQuery> query_executor) 
+    : ConsensusManager(config, rc, system_info),
       checkpoint_manager_(std::make_unique<CheckPointManager>(
-          config, GetBroadCastClient(), GetSignatureVerifier(),
-          system_info_.get())),
+          config, replica_communicator_, GetSignatureVerifier(),
+          system_info_)),
       message_manager_(std::make_unique<MessageManager>(
           config, std::move(executor), checkpoint_manager_.get(),
-          system_info_.get())),
+          system_info_)),
       commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
-                                               GetBroadCastClient(),
-                                               GetSignatureVerifier(), system_info_.get())),
+                                               replica_communicator_,
+                                               GetSignatureVerifier(), system_info_)),
       response_manager_(config_.IsPerformanceRunning()
                             ? nullptr
                             : std::make_unique<ResponseManager>(
-                                  config_, GetBroadCastClient(),
-                                  system_info_.get(), GetSignatureVerifier())),
+                                  config_, replica_communicator_,
+                                  system_info_, GetSignatureVerifier())),
       performance_manager_(config_.IsPerformanceRunning()
                                ? std::make_unique<PerformanceManager>(
-                                     config_, GetBroadCastClient(),
-                                     system_info_.get(), GetSignatureVerifier())
+                                     config_, replica_communicator_,
+                                     system_info_, GetSignatureVerifier())
                                : nullptr),
       view_change_manager_(std::make_unique<ViewChangeManager>(
           config_, checkpoint_manager_.get(), message_manager_.get(),
-          system_info_.get(), GetBroadCastClient(), GetSignatureVerifier())),
+          system_info_, replica_communicator_, GetSignatureVerifier())),
       recovery_(std::make_unique<Recovery>(config_, checkpoint_manager_.get(),
-                                           system_info_.get(),
+                                           system_info_,
                                            message_manager_->GetStorage())),
       query_(std::make_unique<Query>(config_, recovery_.get(),
                                      std::move(query_executor))) {
@@ -76,7 +76,12 @@ ConsensusManagerPBFT::ConsensusManagerPBFT(
       },
       [&](int seq) { message_manager_->SetNextCommitSeq(seq + 1); });
   LOG(ERROR) << " recovery is done";
-}
+} 
+
+ConsensusManagerPBFT::ConsensusManagerPBFT(
+    const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
+    std::unique_ptr<CustomQuery> query_executor)
+    : ConsensusManagerPBFT(config, std::move(executor), nullptr, nullptr, std::move(query_executor)) {}
 
 void ConsensusManagerPBFT::SetNeedCommitQC(bool need_qc) {
   commitment_->SetNeedCommitQC(need_qc);
@@ -278,16 +283,6 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
     case Request::TYPE_RECOVERY_DATA_RESP:
       return ProcessRecoveryDataResponse(std::move(context),
                                          std::move(request));
-    case Request::TYPE_2PC_ABORT_ACK: 
-    case Request::TYPE_2PC_COMMIT_ACK: 
-    case Request::TYPE_2PC_NEW_TXNS: 
-    case Request::TYPE_2PC_PREPARE: 
-    case Request::TYPE_2PC_VOTE_ABORT: 
-    case Request::TYPE_2PC_VOTE_COMMIT: 
-    case Request::TYPE_2PC_COMMIT: 
-      return commitment_->ProcessCrossShardConsensusMessage(std::move(context), 
-                                                            std::move(request));
-
   }
   return 0;
 }
@@ -330,7 +325,7 @@ int ConsensusManagerPBFT::ProcessRecoveryData(
              << " max seq:" << recovery_data.max_seq()
              << " data size:" << response.request_size();
 
-  GetBroadCastClient()->SendMessage(*response_data, request->sender_id());
+  replica_communicator_->SendMessage(*response_data, request->sender_id());
 
   return 0;
 }

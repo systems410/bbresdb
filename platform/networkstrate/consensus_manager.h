@@ -28,6 +28,7 @@
 #include "platform/proto/replica_info.pb.h"
 #include "platform/proto/resdb.pb.h"
 #include "platform/statistic/stats.h"
+#include "platform/consensus/execution/system_info.h"
 
 namespace resdb {
 
@@ -36,7 +37,8 @@ namespace resdb {
 // like PBFT to commit.
 class ConsensusManager : public ServiceInterface {
  public:
-  ConsensusManager(const ResDBConfig& config, bool passive = false);
+  ConsensusManager(const ResDBConfig& config, ReplicaCommunicator* rc = nullptr, SystemInfo* = nullptr);
+
   virtual ~ConsensusManager();
 
   // Process a request receied from ResDBServer.
@@ -51,6 +53,9 @@ class ConsensusManager : public ServiceInterface {
   // Should be called by the instance or test.
   virtual void Start();
 
+  virtual int ConsensusCommit(std::unique_ptr<Context> context,
+                              std::unique_ptr<Request> request);
+
  protected:
   // BroadCast will generate signatures whiling sending data to other replicas.
   virtual void BroadCast(const Request& request);
@@ -59,8 +64,6 @@ class ConsensusManager : public ServiceInterface {
 
   virtual int Dispatch(std::unique_ptr<Context> context,
                        std::unique_ptr<Request> request);
-  virtual int ConsensusCommit(std::unique_ptr<Context> context,
-                              std::unique_ptr<Request> request);
 
   // =============== default function ======================
   int ProcessClientCert(std::unique_ptr<Context> context,
@@ -81,7 +84,6 @@ class ConsensusManager : public ServiceInterface {
   virtual void SetPrimary(uint32_t primary, uint64_t version);
   void AddNewClient(const ReplicaInfo& info);
 
-  ReplicaCommunicator* GetBroadCastClient();
   // Update broad cast client to reflush the replica list.
   void UpdateBroadCastClient();
 
@@ -94,6 +96,10 @@ class ConsensusManager : public ServiceInterface {
 
  protected:
   ResDBConfig config_;
+
+  ReplicaCommunicator* replica_communicator_; 
+  SystemInfo* system_info_;
+
   std::unique_ptr<SignatureVerifier> verifier_;
   struct QueueItem {
     std::unique_ptr<Request> request;
@@ -101,9 +107,12 @@ class ConsensusManager : public ServiceInterface {
   };
 
  private:
+  // optionally owned 
+  std::unique_ptr<ReplicaCommunicator> owned_replica_communicator_ = nullptr; 
+  std::unique_ptr<SystemInfo> owned_system_info_ = nullptr;
+
   std::thread heartbeat_thread_;
   std::atomic<bool> is_ready_ = false;
-  std::unique_ptr<ReplicaCommunicator> bc_client_;
   std::vector<ReplicaInfo> clients_;
   Stats* global_stats_;
   uint64_t version_;

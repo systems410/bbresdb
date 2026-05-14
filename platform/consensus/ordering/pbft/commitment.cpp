@@ -64,7 +64,10 @@ void Commitment::SetPreVerifyFunc(
 
 void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 
-int Commitment::BeginPBFT(std::unique_ptr<Request> user_request, std::unique_ptr<Context> context) { 
+
+int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
+                                  std::unique_ptr<Request> user_request) {
+  
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
@@ -142,33 +145,9 @@ int Commitment::BeginPBFT(std::unique_ptr<Request> user_request, std::unique_ptr
   user_request->set_primary_id(config_.GetSelfInfo().id());
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
-  return 0; 
-} 
-
-
-int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
-                                  std::unique_ptr<Request> user_request) {
-
-  if (!shard_consensus_manager_) {
-    shard_consensus_manager_ = CreateShardConsensusManager();
-  } 
-  
-  shard_consensus_manager_->SetCommitCallback([this](std::unique_ptr<Request> req, std::unique_ptr<Context> context) { 
-    BeginPBFT(std::move(req), std::move(context));
-  });
-
-  user_request->set_type(Request::TYPE_2PC_NEW_TXNS);
-  return shard_consensus_manager_->ConsensusCommit(std::move(context), std::move(user_request));
 }
 
 
-
-std::unique_ptr<twopc::ConsensusManager2PC> Commitment::CreateShardConsensusManager() {
-    return std::make_unique<twopc::ConsensusManager2PC>(
-      ResDBConfig(config_.GetAllReplicas(), config_.GetSelfInfo(), config_.GetConfigData()), 
-      replica_communicator_, system_info_
-    );
-}
 
 // Receive the pre-prepare message from the primary.
 // TODO check whether the sender is the primary.
@@ -391,27 +370,4 @@ DuplicateManager* Commitment::GetDuplicateManager() {
   return duplicate_manager_.get();
 }
     
-int Commitment::ProcessCrossShardConsensusMessage(std::unique_ptr<Context> context, 
-                                                  std::unique_ptr<Request> request) { 
-  
-  if (!shard_consensus_manager_) {
-    shard_consensus_manager_ = CreateShardConsensusManager();
-  } 
-
-  if (request->type() == Request::TYPE_2PC_NEW_TXNS) { 
-    system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id());
-  }
-
-  if (request->type() == Request::TYPE_2PC_PREPARE) { 
-
-    system_info_->SetCrossShardPrimaryId(request->sender_id());
-
-    shard_consensus_manager_->SetCommitCallback([this](std::unique_ptr<Request> req, std::unique_ptr<Context> context) { 
-      BeginPBFT(std::move(req), std::move(context));
-    });
-  } 
-
-  return shard_consensus_manager_->ConsensusCommit(std::move(context), std::move(request));
-}
-
 }  // namespace resdb

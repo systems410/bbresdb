@@ -35,9 +35,17 @@ namespace resdb {
 
 class ConsensusManagerPBFT : public ConsensusManager {
  public:
+
   ConsensusManagerPBFT(const ResDBConfig& config,
                        std::unique_ptr<TransactionManager> executor,
                        std::unique_ptr<CustomQuery> query_executor = nullptr);
+
+  ConsensusManagerPBFT(const ResDBConfig& config,
+                       std::unique_ptr<TransactionManager> executor,
+                       ReplicaCommunicator* rc, 
+                       SystemInfo* system_info,
+                       std::unique_ptr<CustomQuery> query_executor = nullptr);
+
   virtual ~ConsensusManagerPBFT() = default;
 
   int ConsensusCommit(std::unique_ptr<Context> context,
@@ -76,7 +84,6 @@ class ConsensusManagerPBFT : public ConsensusManager {
   void RemoteRecoveryProcess();
 
  protected:
-  std::unique_ptr<SystemInfo> system_info_;
   std::unique_ptr<CheckPointManager> checkpoint_manager_;
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
