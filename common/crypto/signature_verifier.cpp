@@ -157,6 +157,10 @@ absl::StatusOr<KeyInfo> SignatureVerifier::GetPublicKey(int64_t node_id) const {
   std::shared_lock<std::shared_mutex> lk(mutex_);
   auto it = keys_.find(node_id);
   if (it == keys_.end()) {
+    // test
+    for (const auto& [node_id, _] : keys_) { 
+    }
+    // end test 
     return absl::InvalidArgumentError("Public key not exist.");
   }
   return it->second.public_key_info().key();

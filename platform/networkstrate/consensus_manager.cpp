@@ -40,26 +40,31 @@ bool ReplicaExisted(const ReplicaInfo& replica_info,
 
 }  // namespace
 
-ConsensusManager::ConsensusManager(const ResDBConfig& config, 
-                                   ReplicaCommunicator* rc, 
-                                   SystemInfo* system_info)
+ConsensusManager::ConsensusManager(const ResDBConfig& config) : ConsensusManager(config, CrossProtocolResources()) {} 
+
+ConsensusManager::ConsensusManager(const ResDBConfig& config, const CrossProtocolResources& resources) 
     : config_(config), global_stats_(Stats::GetGlobalStats()) {
   if (config_.SignatureVerifierEnabled()) {
-    verifier_ = std::make_unique<SignatureVerifier>(
-        config_.GetPrivateKey(), config_.GetPublicKeyCertificateInfo());
+    if (resources.verifier == nullptr) { 
+      owned_verifier_ = std::make_unique<SignatureVerifier>(
+          config_.GetPrivateKey(), config_.GetPublicKeyCertificateInfo());
+      verifier_ = owned_verifier_.get(); 
+    } else { 
+      verifier_ = resources.verifier; 
+    }
   }
-  if (rc == nullptr) { 
+  if (resources.rc == nullptr) { 
     owned_replica_communicator_ = GetReplicaClient(config_.GetAllReplicas(), true);
     replica_communicator_ = owned_replica_communicator_.get(); 
   } else { 
-    replica_communicator_ = rc; 
+    replica_communicator_ = resources.rc; 
   }
 
-  if (system_info == nullptr) { 
+  if (resources.system_info == nullptr) { 
     owned_system_info_ = std::make_unique<SystemInfo>(config);
     system_info_ = owned_system_info_.get(); 
   } else { 
-    system_info_ = system_info; 
+    system_info_ = resources.system_info; 
   }
 }
 
@@ -71,13 +76,13 @@ ConsensusManager::~ConsensusManager() {
 }
 
 void ConsensusManager::UpdateBroadCastClient() {
-  owned_replica_communicator_ = GetReplicaClient(GetReplicas(), true);
+  owned_replica_communicator_ = GetReplicaClient(config_.GetAllReplicas(), true);
   replica_communicator_ = owned_replica_communicator_.get(); 
 }
 
 
 SignatureVerifier* ConsensusManager::GetSignatureVerifier() {
-  return verifier_ == nullptr ? nullptr : verifier_.get();
+  return verifier_; 
 }
 
 bool ConsensusManager::IsReady() const { return is_ready_; }
@@ -91,7 +96,8 @@ void ConsensusManager::Stop() {
 
 void ConsensusManager::Start() {
   ServiceInterface::Start();
-  if (config_.HeartBeatEnabled() && verifier_) {
+  // Only the owner of the verifier handles heart beats
+  if (config_.HeartBeatEnabled() && owned_verifier_) {
     heartbeat_thread_ =
         std::thread(&ConsensusManager::HeartBeat, this);  // pass by reference
   }
@@ -232,7 +238,7 @@ int ConsensusManager::Dispatch(std::unique_ptr<Context> context,
 int ConsensusManager::ProcessHeartBeat(std::unique_ptr<Context> context,
                                        std::unique_ptr<Request> request) {
   std::unique_lock<std::mutex> lk(hb_mutex_);
-  std::vector<ReplicaInfo> replicas = GetReplicas();
+  std::vector<ReplicaInfo> replicas = config_.GetAllReplicas();
   HeartBeatInfo hb_info;
   if (!hb_info.ParseFromString(request->data())) {
     LOG(ERROR) << "parse replica info fail\n";
@@ -375,7 +381,7 @@ std::unique_ptr<ReplicaCommunicator> ConsensusManager::GetReplicaClient(
       replicas,
       verifier_ == nullptr || config_.GetConfigData().not_need_signature()
           ? nullptr
-          : verifier_.get(),
+          : verifier_,
       is_use_long_conn, config_.GetOutputWorkerNum(), config_.GetTcpBatchNum());
 }
 

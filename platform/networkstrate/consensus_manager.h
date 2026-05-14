@@ -32,12 +32,20 @@
 
 namespace resdb {
 
+struct CrossProtocolResources { 
+  ReplicaCommunicator* rc = nullptr; 
+  SystemInfo* system_info = nullptr;
+  SignatureVerifier* verifier = nullptr; 
+};
+
 // ConsensusManager is an consensus algorithm implimentation.
 // It receives the messages from ResDBServer and running a consensus algorithm
 // like PBFT to commit.
 class ConsensusManager : public ServiceInterface {
  public:
-  ConsensusManager(const ResDBConfig& config, ReplicaCommunicator* rc = nullptr, SystemInfo* = nullptr);
+
+  ConsensusManager(const ResDBConfig& config); 
+  ConsensusManager(const ResDBConfig& config, const CrossProtocolResources& resources); 
 
   virtual ~ConsensusManager();
 
@@ -56,6 +64,9 @@ class ConsensusManager : public ServiceInterface {
   virtual int ConsensusCommit(std::unique_ptr<Context> context,
                               std::unique_ptr<Request> request);
 
+  virtual int ProcessHeartBeat(std::unique_ptr<Context> context,
+                               std::unique_ptr<Request> request);
+
  protected:
   // BroadCast will generate signatures whiling sending data to other replicas.
   virtual void BroadCast(const Request& request);
@@ -68,8 +79,7 @@ class ConsensusManager : public ServiceInterface {
   // =============== default function ======================
   int ProcessClientCert(std::unique_ptr<Context> context,
                         std::unique_ptr<Request> request);
-  int ProcessHeartBeat(std::unique_ptr<Context> context,
-                       std::unique_ptr<Request> request);
+
   // =======================================================
 
   virtual std::unique_ptr<ReplicaCommunicator> GetReplicaClient(
@@ -97,10 +107,11 @@ class ConsensusManager : public ServiceInterface {
  protected:
   ResDBConfig config_;
 
+  // May be owned or not owned, as it may be shared across protocols 
   ReplicaCommunicator* replica_communicator_; 
   SystemInfo* system_info_;
+  SignatureVerifier* verifier_;
 
-  std::unique_ptr<SignatureVerifier> verifier_;
   struct QueueItem {
     std::unique_ptr<Request> request;
     std::vector<ReplicaInfo> replicas;
@@ -110,6 +121,8 @@ class ConsensusManager : public ServiceInterface {
   // optionally owned 
   std::unique_ptr<ReplicaCommunicator> owned_replica_communicator_ = nullptr; 
   std::unique_ptr<SystemInfo> owned_system_info_ = nullptr;
+  std::unique_ptr<SignatureVerifier> owned_verifier_ = nullptr; 
+
 
   std::thread heartbeat_thread_;
   std::atomic<bool> is_ready_ = false;

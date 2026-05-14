@@ -43,11 +43,17 @@ class ShardedConsensusManager2PC : public ConsensusManager {
                              std::unique_ptr<CustomQuery> query_executor = nullptr) 
   : ConsensusManager(config),
     replica_cm_(std::make_unique<ReplicaCM>(config, std::move(executor),  
-                                            replica_communicator_, system_info_, std::move(query_executor))), 
+                                            CrossProtocolResources{ 
+                                              .rc = replica_communicator_, 
+                                              .system_info = system_info_, 
+                                              .verifier = verifier_
+                                            },
+                                            std::move(query_executor))), 
     message_manager_(std::make_unique<MessageManager>(
         config, system_info_, replica_cm_.get())),
     commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
-                                            replica_communicator_, system_info_)),
+                                            replica_communicator_, GetSignatureVerifier(),
+                                            system_info_)),
     performance_manager_(config_.IsPerformanceRunning()
                             ? std::make_unique<PerformanceManager>(
                                     config_, replica_communicator_,
@@ -85,11 +91,6 @@ class ShardedConsensusManager2PC : public ConsensusManager {
 
   std::vector<ReplicaInfo> GetReplicas() override {
     return config_.GetAllReplicas(); 
-  }
-
-  void Start() override {
-    LOG(ERROR) << " ======= start";
-    ConsensusManager::Start();
   }
 
  protected:

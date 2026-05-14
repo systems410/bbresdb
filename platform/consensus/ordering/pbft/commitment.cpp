@@ -96,14 +96,14 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
 
   // SHARD TODO 
   // check signatures
-  // bool valid = verifier_->VerifyMessage(user_request->data(),
-  //                                       user_request->data_signature());
-  // if (!valid) {
-  //   LOG(ERROR) << "request is not valid:"
-  //              << user_request->data_signature().DebugString();
-  //   LOG(ERROR) << " msg:" << user_request->data().size();
-  //   return -2;
-  // }
+  bool valid = verifier_->VerifyMessage(user_request->data(),
+                                        user_request->data_signature());
+  if (!valid) {
+    LOG(ERROR) << "request is not valid:"
+               << user_request->data_signature().DebugString();
+    LOG(ERROR) << " msg:" << user_request->data().size();
+    return -2;
+  }
 
   if (pre_verify_func_ && !pre_verify_func_(*user_request)) {
     LOG(ERROR) << " check by the user func fail";
@@ -222,14 +222,14 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
     batch_request.SerializeToString(&data);
     // check signatures
     // SHARD TODO 
-    // bool valid =
-    //     verifier_->VerifyMessage(request->data(), request->data_signature());
-    // if (!valid) {
-    //   LOG(ERROR) << "request is not valid:"
-    //              << request->data_signature().DebugString();
-    //   LOG(ERROR) << " msg:" << request->data().size();
-    //   return -2;
-    // }
+    bool valid =
+        verifier_->VerifyMessage(request->data(), request->data_signature());
+    if (!valid) {
+      LOG(ERROR) << "request is not valid:"
+                 << request->data_signature().DebugString();
+      LOG(ERROR) << " msg:" << request->data().size();
+      return -2;
+    }
     if (duplicate_manager_->CheckAndAddProposed(request->hash())) {
       LOG(INFO) << "The request is already proposed, reject";
       return -2;

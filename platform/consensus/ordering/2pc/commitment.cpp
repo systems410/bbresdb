@@ -32,8 +32,10 @@ namespace twopc
 Commitment::Commitment(const ResDBConfig& config,
                        MessageManager* message_manager,
                        ReplicaCommunicator* replica_communicator, 
+                        SignatureVerifier* verifier,  
                        SystemInfo* info) 
     : config_(config),
+      verifier_(verifier),
       message_manager_(message_manager),
       stop_(false),
       replica_communicator_(replica_communicator), 
@@ -121,45 +123,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   return 0;
 }
 
-int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
-                                  std::unique_ptr<Request> request) {
-  if (global_stats_->IsFaulty() || context == nullptr ||
-      context->signature.signature().empty()) {
-    LOG(ERROR) << "user request doesn't contain signature, reject";
-    return -2;
-  }
-
-  if (request->sender_id() != message_manager_->GetCurrentPrimary()) {
-    LOG(ERROR) << "the request is not from primary. sender:"
-               << request->sender_id() << " seq:" << request->seq();
-    return -2;
-  }
-
-  if (request->sender_id() != config_.GetSelfInfo().id()) {
-    BatchUserRequest batch_request;
-    batch_request.ParseFromString(request->data());
-    batch_request.clear_createtime();
-    std::string data;
-    batch_request.SerializeToString(&data);
-  }
-
-  global_stats_->IncPropose();
-  global_stats_->RecordStateTime("pre-prepare");
-  std::unique_ptr<Request> prepare_request = NewRequest(
-      Request::TYPE_2PC_PREPARE, *request, config_.GetSelfInfo().id());
-  prepare_request->clear_data();
-
-  // Add request to message_manager.
-  // If it has received enough same requests(2f+1), broadcast the prepare
-  // message.
-  CollectorResultCode ret =
-      message_manager_->AddConsensusMsg(std::move(context), std::move(request));
-  if (ret == CollectorResultCode::STATE_CHANGED) {
-    replica_communicator_->SendMessageTo(*prepare_request, GetShardPrimaryIds());
-  }
-  return ret == CollectorResultCode::INVALID ? -2 : 0;
-}
-
 int Commitment::ProcessCommitAckMsg(std::unique_ptr<Context> context, std::unique_ptr<Request> request) { 
   return 0; 
 }
@@ -208,12 +171,11 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   std::unique_ptr<Request> commit_vote = NewRequest(
       Request::TYPE_2PC_VOTE_COMMIT, *request, config_.GetSelfInfo().id());
 
+
   CollectorResultCode ret = message_manager_->AddConsensusMsg(std::move(context), std::move(request));
   if (ret == CollectorResultCode::INVALID) { 
     return ret; 
   }
-
-  commit_vote->mutable_data_signature()->Clear();
 
   global_stats_->RecordStateTime("prepare");
 

@@ -42,8 +42,7 @@ class ConsensusManagerPBFT : public ConsensusManager {
 
   ConsensusManagerPBFT(const ResDBConfig& config,
                        std::unique_ptr<TransactionManager> executor,
-                       ReplicaCommunicator* rc, 
-                       SystemInfo* system_info,
+                       const CrossProtocolResources& resources,
                        std::unique_ptr<CustomQuery> query_executor = nullptr); 
 
   virtual ~ConsensusManagerPBFT() = default;

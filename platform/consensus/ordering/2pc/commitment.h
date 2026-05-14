@@ -34,15 +34,16 @@ namespace twopc
 
 class Commitment {
  public:
-  Commitment(const ResDBConfig& config, MessageManager* message_manager,
-             ReplicaCommunicator* replica_communicator, SystemInfo* info);
+  Commitment(const ResDBConfig& config, 
+             MessageManager* message_manager,
+             ReplicaCommunicator* replica_communicator,
+             SignatureVerifier* verifier,  
+             SystemInfo* info);
   virtual ~Commitment();
 
   virtual int ProcessNewRequest(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> user_request);
 
-  virtual int ProcessProposeMsg(std::unique_ptr<Context> context,
-                                std::unique_ptr<Request> request);
   virtual int ProcessPrepareMsg(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> request);
   virtual int ProcessCommitMsg(std::unique_ptr<Context> context,
@@ -69,7 +70,9 @@ class Commitment {
   std::set<uint32_t> GetShardPrimaryIds(); 
 
  protected:
+ 
   ResDBConfig config_;
+  SignatureVerifier* verifier_;
   MessageManager* message_manager_;
   SystemInfo* system_info_; 
   std::thread executed_thread_;

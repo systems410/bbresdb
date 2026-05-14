@@ -28,9 +28,9 @@ namespace resdb {
 
 ConsensusManagerPBFT::ConsensusManagerPBFT(
     const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
-    ReplicaCommunicator* rc, SystemInfo* system_info, 
-    std::unique_ptr<CustomQuery> query_executor) 
-    : ConsensusManager(config, rc, system_info),
+    const CrossProtocolResources& resources, std::unique_ptr<CustomQuery> query_executor) 
+
+    : ConsensusManager(config, resources),
       checkpoint_manager_(std::make_unique<CheckPointManager>(
           config, replica_communicator_, GetSignatureVerifier(),
           system_info_)),
@@ -81,7 +81,7 @@ ConsensusManagerPBFT::ConsensusManagerPBFT(
 ConsensusManagerPBFT::ConsensusManagerPBFT(
     const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
     std::unique_ptr<CustomQuery> query_executor)
-    : ConsensusManagerPBFT(config, std::move(executor), nullptr, nullptr, std::move(query_executor)) {}
+    : ConsensusManagerPBFT(config, std::move(executor), CrossProtocolResources(), std::move(query_executor)) {}
 
 void ConsensusManagerPBFT::SetNeedCommitQC(bool need_qc) {
   commitment_->SetNeedCommitQC(need_qc);
@@ -251,7 +251,7 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received prepare" << std::endl;
+      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received prepare from " << request->sender_id() << std::endl;
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
