@@ -51,8 +51,6 @@ class Commitment {
   void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
   void SetNeedCommitQC(bool need_qc);
 
-  int ProcessCrossShardConsensusMessage(std::unique_ptr<Context>, std::unique_ptr<Request>);
-
   std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
       request_complained_;
 
@@ -63,16 +61,10 @@ class Commitment {
  protected:
   virtual int PostProcessExecutedMsg();
 
-  std::unique_ptr<twopc::ConsensusManager2PC> CreateShardConsensusManager(); 
-
-  int BeginPBFT(std::unique_ptr<Request>, std::unique_ptr<Context>); 
-
-
  protected:
   ResDBConfig config_;
   SystemInfo* system_info_; 
   MessageManager* message_manager_;
-  std::unique_ptr<twopc::ConsensusManager2PC> shard_consensus_manager_ = nullptr; 
   std::thread executed_thread_;
   std::atomic<bool> stop_;
   ReplicaCommunicator* replica_communicator_;

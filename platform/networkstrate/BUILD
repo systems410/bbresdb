@@ -60,6 +60,7 @@ cc_library(
         "//platform/proto:broadcast_cc_proto",
         "//platform/proto:resdb_cc_proto",
         "//platform/statistic:stats",
+        "//platform/consensus/execution:system_info",
     ],
 )
 

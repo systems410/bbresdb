@@ -30,12 +30,11 @@
 #include "executor/common/transaction_manager.h"
 #include "platform/common/queue/lock_free_queue.h"
 #include "platform/config/resdb_config.h"
-#include "platform/consensus/ordering/2pc/checkpoint_manager.h"
 #include "platform/consensus/ordering/2pc/lock_free_collector_pool.h"
 #include "platform/consensus/ordering/2pc/transaction_collector.h"
-#include "platform/consensus/ordering/2pc/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/networkstrate/server_comm.h"
-#include "platform/proto/checkpoint_info.pb.h"
+#include "platform/networkstrate/consensus_manager.h"
 #include "platform/proto/resdb.pb.h"
 #include "platform/statistic/stats.h"
 
@@ -45,7 +44,7 @@ namespace twopc {
 
 class MessageManager {
  public:
-  MessageManager(const ResDBConfig& config, SystemInfo* system_info);
+  MessageManager(const ResDBConfig& config, SystemInfo* system_info, ConsensusManager* replica_cm);
   ~MessageManager();
 
   void IncrementSequence(); 
@@ -55,7 +54,6 @@ class MessageManager {
   void SetNextSeq(uint64_t seq);
   int64_t GetNextSeq();
 
-  void SetConsensusCallback(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> callback);
 
   // Add commit messages and return the number of messages have been received.
   // The commit messages only include post(pre-prepare), prepare and commit
@@ -109,9 +107,8 @@ class MessageManager {
 
  private:
   ResDBConfig config_;
+  ConsensusManager* replica_cm_; 
   uint64_t next_seq_ = 1;
-
-  std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> consensus_func_; 
 
   LockFreeQueue<BatchUserResponse> queue_;
   ChainState* txn_db_;

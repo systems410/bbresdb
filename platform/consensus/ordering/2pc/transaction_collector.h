@@ -22,6 +22,7 @@
 #include <bitset>
 
 #include "platform/networkstrate/server_comm.h"
+#include "platform/networkstrate/consensus_manager.h"
 #include "platform/proto/resdb.pb.h"
 #include "platform/statistic/stats.h"
 
@@ -106,7 +107,7 @@ class TransactionCollector {
                          CollectorDataType* data,
                          std::atomic<TransactionStatue>* status, bool force)>
           call_back, 
-      std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> execute_func);
+      ConsensusManager* replica_cm);
 
   std::vector<RequestInfo> GetPreparedProof();
   TransactionStatue GetStatus() const;
@@ -118,7 +119,7 @@ class TransactionCollector {
   std::vector<std::string> GetAllStoredHash();
 
  private:
-  int Commit(std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)>);
+  int Commit(ConsensusManager* replica_cm);
 
  private:
   uint64_t seq_;

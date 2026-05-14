@@ -22,7 +22,7 @@
 #include <glog/logging.h>
 
 #include "common/utils/utils.h"
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/proto/viewchange_message.pb.h"
 
 namespace resdb {

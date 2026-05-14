@@ -28,33 +28,33 @@ namespace resdb {
 
 ConsensusManagerPBFT::ConsensusManagerPBFT(
     const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
-    std::unique_ptr<CustomQuery> query_executor)
-    : ConsensusManager(config),
-      system_info_(std::make_unique<SystemInfo>(config)),
+    const CrossProtocolResources& resources, std::unique_ptr<CustomQuery> query_executor) 
+
+    : ConsensusManager(config, resources),
       checkpoint_manager_(std::make_unique<CheckPointManager>(
-          config, GetBroadCastClient(), GetSignatureVerifier(),
-          system_info_.get())),
+          config, replica_communicator_, GetSignatureVerifier(),
+          system_info_)),
       message_manager_(std::make_unique<MessageManager>(
           config, std::move(executor), checkpoint_manager_.get(),
-          system_info_.get())),
+          system_info_)),
       commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
-                                               GetBroadCastClient(),
-                                               GetSignatureVerifier(), system_info_.get())),
+                                               replica_communicator_,
+                                               GetSignatureVerifier(), system_info_)),
       response_manager_(config_.IsPerformanceRunning()
                             ? nullptr
                             : std::make_unique<ResponseManager>(
-                                  config_, GetBroadCastClient(),
-                                  system_info_.get(), GetSignatureVerifier())),
+                                  config_, replica_communicator_,
+                                  system_info_, GetSignatureVerifier())),
       performance_manager_(config_.IsPerformanceRunning()
                                ? std::make_unique<PerformanceManager>(
-                                     config_, GetBroadCastClient(),
-                                     system_info_.get(), GetSignatureVerifier())
+                                     config_, replica_communicator_,
+                                     system_info_, GetSignatureVerifier())
                                : nullptr),
       view_change_manager_(std::make_unique<ViewChangeManager>(
           config_, checkpoint_manager_.get(), message_manager_.get(),
-          system_info_.get(), GetBroadCastClient(), GetSignatureVerifier())),
+          system_info_, replica_communicator_, GetSignatureVerifier())),
       recovery_(std::make_unique<Recovery>(config_, checkpoint_manager_.get(),
-                                           system_info_.get(),
+                                           system_info_,
                                            message_manager_->GetStorage())),
       query_(std::make_unique<Query>(config_, recovery_.get(),
                                      std::move(query_executor))) {
@@ -76,7 +76,12 @@ ConsensusManagerPBFT::ConsensusManagerPBFT(
       },
       [&](int seq) { message_manager_->SetNextCommitSeq(seq + 1); });
   LOG(ERROR) << " recovery is done";
-}
+} 
+
+ConsensusManagerPBFT::ConsensusManagerPBFT(
+    const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
+    std::unique_ptr<CustomQuery> query_executor)
+    : ConsensusManagerPBFT(config, std::move(executor), CrossProtocolResources(), std::move(query_executor)) {}
 
 void ConsensusManagerPBFT::SetNeedCommitQC(bool need_qc) {
   commitment_->SetNeedCommitQC(need_qc);
@@ -163,7 +168,6 @@ int ConsensusManagerPBFT::ConsensusCommit(std::unique_ptr<Context> context,
         case Request::TYPE_PRE_PREPARE:
         case Request::TYPE_PREPARE:
         case Request::TYPE_COMMIT:
-        case Request::TYPE_2PC_NEW_TXNS: 
           AddPendingRequest(std::move(context), std::move(request));
           return 0;
       }
@@ -205,14 +209,16 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received client request" << std::endl;
+      LOG(ERROR) << "[PBFT] Received client request from " 
+                 << request->sender_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received response" << std::endl;
+      LOG(ERROR) << "[PBFT] Received response from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -220,7 +226,8 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received new txns" << std::endl;
+      LOG(ERROR) << "[PBFT] Received new txns from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -243,15 +250,18 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PRE_PREPARE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received pre-prepare" << std::endl;
+      LOG(ERROR) << "[PBFT] Received pre-prepare from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received prepare" << std::endl;
+      LOG(ERROR) << "[PBFT] Received prepare from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received commit" << std::endl;
+      LOG(ERROR) << "[PBFT] Received commit from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:
@@ -278,16 +288,6 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
     case Request::TYPE_RECOVERY_DATA_RESP:
       return ProcessRecoveryDataResponse(std::move(context),
                                          std::move(request));
-    case Request::TYPE_2PC_ABORT_ACK: 
-    case Request::TYPE_2PC_COMMIT_ACK: 
-    case Request::TYPE_2PC_NEW_TXNS: 
-    case Request::TYPE_2PC_PREPARE: 
-    case Request::TYPE_2PC_VOTE_ABORT: 
-    case Request::TYPE_2PC_VOTE_COMMIT: 
-    case Request::TYPE_2PC_COMMIT: 
-      return commitment_->ProcessCrossShardConsensusMessage(std::move(context), 
-                                                            std::move(request));
-
   }
   return 0;
 }
@@ -330,7 +330,7 @@ int ConsensusManagerPBFT::ProcessRecoveryData(
              << " max seq:" << recovery_data.max_seq()
              << " data size:" << response.request_size();
 
-  GetBroadCastClient()->SendMessage(*response_data, request->sender_id());
+  replica_communicator_->SendMessage(*response_data, request->sender_id());
 
   return 0;
 }

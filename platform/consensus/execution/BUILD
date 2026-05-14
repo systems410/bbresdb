@@ -16,7 +16,7 @@
 # under the License.
 #
 
-package(default_visibility = ["//platform/consensus:__subpackages__"])
+package(default_visibility = ["//platform:__subpackages__"])
 
 cc_library(
     name = "system_info",

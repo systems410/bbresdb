@@ -38,7 +38,7 @@ cc_library(
     srcs = ["performance_manager.cpp"],
     hdrs = ["performance_manager.h"],
     deps = [
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//platform/networkstrate:replica_communicator",
         "//platform/networkstrate:server_comm",
     ],
@@ -49,7 +49,7 @@ cc_library(
     srcs = ["response_manager.cpp"],
     hdrs = ["response_manager.h"],
     deps = [
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//platform/networkstrate:replica_communicator",
         "//platform/networkstrate:server_comm",
     ],

@@ -23,7 +23,6 @@
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/execution/duplicate_manager.h"
 #include "platform/consensus/ordering/2pc/message_manager.h"
-#include "platform/consensus/ordering/2pc/response_manager.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
@@ -34,15 +33,16 @@ namespace twopc
 
 class Commitment {
  public:
-  Commitment(const ResDBConfig& config, MessageManager* message_manager,
-             ReplicaCommunicator* replica_communicator, SystemInfo* info);
+  Commitment(const ResDBConfig& config, 
+             MessageManager* message_manager,
+             ReplicaCommunicator* replica_communicator,
+             SignatureVerifier* verifier,  
+             SystemInfo* info);
   virtual ~Commitment();
 
   virtual int ProcessNewRequest(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> user_request);
 
-  virtual int ProcessProposeMsg(std::unique_ptr<Context> context,
-                                std::unique_ptr<Request> request);
   virtual int ProcessPrepareMsg(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> request);
   virtual int ProcessCommitMsg(std::unique_ptr<Context> context,
@@ -64,21 +64,18 @@ class Commitment {
   DuplicateManager* GetDuplicateManager();
 
  protected:
-  virtual int PostProcessExecutedMsg();
-
   std::set<uint32_t> GetShardPrimaryIds(); 
 
  protected:
+ 
   ResDBConfig config_;
+  SignatureVerifier* verifier_;
   MessageManager* message_manager_;
   SystemInfo* system_info_; 
-  std::thread executed_thread_;
-  std::atomic<bool> stop_;
   ReplicaCommunicator* replica_communicator_;
 
   Stats* global_stats_;
 
-  std::mutex mutex_;
   std::unique_ptr<DuplicateManager> duplicate_manager_;
 };
 

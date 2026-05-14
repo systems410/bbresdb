@@ -73,7 +73,7 @@ int TransactionCollector::AddRequest(
     std::function<void(const Request&, int received_count, CollectorDataType*,
                        std::atomic<TransactionStatue>* status, bool force)>
         call_back,
-      std::function<void(std::unique_ptr<Request>, std::unique_ptr<Context>)> execute_func) {
+     ConsensusManager* replica_cm) {
   if (request == nullptr) {
     return -2;
   }
@@ -142,15 +142,14 @@ int TransactionCollector::AddRequest(
               false);
   }
 
-  if (status_.load() == TransactionStatue::READY_EXECUTE && execute_func != nullptr) {
-    Commit(std::move(execute_func));
+  if (status_.load() == TransactionStatue::READY_EXECUTE) {
+    Commit(replica_cm);
     return 1;
   }
   return 0;
 }
 
-int TransactionCollector::Commit(std::function<void(std::unique_ptr<Request>, 
-                                 std::unique_ptr<Context>)> execute_func) { 
+int TransactionCollector::Commit(ConsensusManager* replica_cm) {  
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
   bool res = status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
@@ -177,10 +176,10 @@ int TransactionCollector::Commit(std::function<void(std::unique_ptr<Request>,
       for (const auto& sig : commit_certs_) {
         *main_request->request->mutable_committed_certs()
              ->add_committed_certs() = sig;
-        // LOG(ERROR) << "add sig:" << sig.DebugString();
       }
     }
-    execute_func(std::move(main_request->request), std::move(main_context->context)); 
+    main_request->request->set_type(Request::TYPE_NEW_TXNS);
+    replica_cm->ConsensusCommit(std::move(main_context->context), std::move(main_request->request));
   } 
   return 0;
 }

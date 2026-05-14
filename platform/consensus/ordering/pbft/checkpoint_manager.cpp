@@ -21,7 +21,7 @@
 
 #include <glog/logging.h>
 
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/proto/checkpoint_info.pb.h"
 
 namespace resdb {

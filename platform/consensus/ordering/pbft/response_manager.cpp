@@ -352,8 +352,6 @@ int ResponseManager::DoBatch(
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
   uint32_t next_primary = GetNextPrimary(); 
-  std::cout << "[SHARD] Sending message to shard " << next_primary 
-            << " primary: " << GetPrimaryOfShard(next_primary) << std::endl;
   replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(next_primary));
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
