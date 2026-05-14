@@ -30,7 +30,7 @@
 #include "platform/config/resdb_config_utils.h"
 #include "platform/consensus/execution/system_info.h"
 #include "platform/consensus/ordering/pbft/checkpoint_manager.h"
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/networkstrate/mock_replica_communicator.h"
 #include "platform/proto/checkpoint_info.pb.h"
 

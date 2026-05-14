@@ -209,14 +209,16 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received client request" << std::endl;
+      LOG(ERROR) << "[PBFT] Received client request from " 
+                 << request->sender_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
       }
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received response" << std::endl;
+      LOG(ERROR) << "[PBFT] Received response from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -224,7 +226,8 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received new txns" << std::endl;
+      LOG(ERROR) << "[PBFT] Received new txns from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -247,15 +250,18 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PRE_PREPARE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received pre-prepare" << std::endl;
+      LOG(ERROR) << "[PBFT] Received pre-prepare from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received prepare from " << request->sender_id() << std::endl;
+      LOG(ERROR) << "[PBFT] Received prepare from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
-      std::cout << "[PBFT] ConsensusManagerPBFT::InternalConsensusCommit: Received commit" << std::endl;
+      LOG(ERROR) << "[PBFT] Received commit from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:

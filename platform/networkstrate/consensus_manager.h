@@ -64,8 +64,6 @@ class ConsensusManager : public ServiceInterface {
   virtual int ConsensusCommit(std::unique_ptr<Context> context,
                               std::unique_ptr<Request> request);
 
-  virtual int ProcessHeartBeat(std::unique_ptr<Context> context,
-                               std::unique_ptr<Request> request);
 
  protected:
   // BroadCast will generate signatures whiling sending data to other replicas.
@@ -76,11 +74,8 @@ class ConsensusManager : public ServiceInterface {
   virtual int Dispatch(std::unique_ptr<Context> context,
                        std::unique_ptr<Request> request);
 
-  // =============== default function ======================
-  int ProcessClientCert(std::unique_ptr<Context> context,
-                        std::unique_ptr<Request> request);
-
-  // =======================================================
+  int ProcessHeartBeat(std::unique_ptr<Context> context,
+                               std::unique_ptr<Request> request);
 
   virtual std::unique_ptr<ReplicaCommunicator> GetReplicaClient(
       const std::vector<ReplicaInfo>& replicas, bool is_use_long_conn = false);

@@ -156,7 +156,6 @@ int ResponseManager::ProcessResponseMsg(std::unique_ptr<Context> context,
 
 bool ResponseManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status) {
-      std::cout << "[PBFT] Received: " << received_count << " need: " << config_.GetMinClientReceiveNum(1) << std::endl;
   switch (type) {
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.

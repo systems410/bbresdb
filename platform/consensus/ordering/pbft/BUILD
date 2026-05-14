@@ -43,7 +43,7 @@ cc_library(
     hdrs = ["response_manager.h"],
     deps = [
         ":lock_free_collector_pool",
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//platform/networkstrate:replica_communicator",
     ],
 )
@@ -66,7 +66,7 @@ cc_library(
     hdrs = ["performance_manager.h"],
     deps = [
         ":lock_free_collector_pool",
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//platform/networkstrate:replica_communicator",
     ],
 )
@@ -79,7 +79,7 @@ cc_library(
         ":checkpoint_manager",
         ":lock_free_collector_pool",
         ":transaction_collector",
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//chain/state:chain_state",
         "//executor/common:transaction_manager",
         "//platform/config:resdb_config",
@@ -133,7 +133,7 @@ cc_library(
     srcs = ["checkpoint_manager.cpp"],
     hdrs = ["checkpoint_manager.h"],
     deps = [
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//chain/state:chain_state",
         "//common/crypto:signature_verifier",
         "//interface/common:resdb_txn_accessor",
@@ -166,7 +166,7 @@ cc_library(
     deps = [
         ":checkpoint_manager",
         ":message_manager",
-        ":transaction_utils",
+        "//platform/consensus/ordering/common:transaction_utils",
         "//platform/config:resdb_config",
         "//platform/consensus/execution:system_info",
         "//platform/networkstrate:replica_communicator",

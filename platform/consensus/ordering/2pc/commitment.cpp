@@ -23,7 +23,7 @@
 #include <unistd.h>
 
 #include "common/utils/utils.h"
-#include "platform/consensus/ordering/2pc/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 
 namespace resdb {
 
@@ -37,10 +37,8 @@ Commitment::Commitment(const ResDBConfig& config,
     : config_(config),
       verifier_(verifier),
       message_manager_(message_manager),
-      stop_(false),
       replica_communicator_(replica_communicator), 
       system_info_(info) {
-  executed_thread_ = std::thread(&Commitment::PostProcessExecutedMsg, this);
   global_stats_ = Stats::GetGlobalStats();
   duplicate_manager_ = std::make_unique<DuplicateManager>(config);
 
@@ -51,12 +49,7 @@ Commitment::Commitment(const ResDBConfig& config,
   global_stats_->SetPrimaryId(message_manager_->GetCurrentPrimary());
 }
 
-Commitment::~Commitment() {
-  stop_ = true;
-  if (executed_thread_.joinable()) {
-    executed_thread_.join();
-  }
-}
+Commitment::~Commitment() {}
 
 // Send a prepare request to each replica 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
@@ -101,7 +94,7 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   }
 
   global_stats_->RecordStateTime("request");
-  auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id());
+  auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id(), user_request->sender_shard_id());
   req_cpy->set_current_view(message_manager_->GetCurrentView());
   req_cpy->set_seq(*seq);
 
@@ -117,7 +110,8 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_sender_shard_id(config_.GetSelfShard()); 
   user_request->set_primary_id(config_.GetSelfInfo().id());
 
-  std::cout << "[2PC] Commitment::ProcessNewRequest: Broadcasting prepare message to cross shard primaries" << std::endl;
+  LOG(ERROR) << "[2PC] Broadcasting prepare message to cross shard primaries";
+
   replica_communicator_->SendMessageTo(*user_request, GetShardPrimaryIds());
 
   return 0;
@@ -144,16 +138,14 @@ int Commitment::ProcessVoteMsg(std::unique_ptr<Context> context,
   uint64_t seq = request->seq();
 
   std::unique_ptr<Request> global_decision = NewRequest(
-      Request::TYPE_2PC_COMMIT, *request, config_.GetSelfInfo().id() 
+      Request::TYPE_2PC_COMMIT, *request, config_.GetSelfInfo().id(), config_.GetSelfShard()
   );
 
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(std::move(context), std::move(request));
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    // We have received all the commits we need. broadcast the global descision 
-    // Add request to message_manager.
-    std::cout << "[2PC] Commitment::ProcessVoteMsg: Broadcasting global decision to cross shard primaries" << std::endl;
+    LOG(ERROR) << "[2PC] Broadcasting global decision to commit to cross shard primaries";
     replica_communicator_->SendMessageTo(*global_decision, GetShardPrimaryIds());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -169,7 +161,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   int64_t sender = request->sender_id(); 
 
   std::unique_ptr<Request> commit_vote = NewRequest(
-      Request::TYPE_2PC_VOTE_COMMIT, *request, config_.GetSelfInfo().id());
+      Request::TYPE_2PC_VOTE_COMMIT, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
 
 
   CollectorResultCode ret = message_manager_->AddConsensusMsg(std::move(context), std::move(request));
@@ -180,7 +172,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   global_stats_->RecordStateTime("prepare");
 
   // Send the vote back to the coordinator 
-  std::cout << "[2PC] Commitment::ProcessPrepareMSg: Sending vote to commit to " << sender << std::endl;
+  LOG(ERROR) << "[2PC] Sending vote to commit to " << sender;
   replica_communicator_->SendMessage(*commit_vote, sender);
 
   return 1; 
@@ -199,43 +191,18 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
   int64_t sender = request->sender_id(); 
 
   std::unique_ptr<Request> ack = NewRequest(Request::TYPE_2PC_COMMIT_ACK, 
-                                        *request, config_.GetSelfInfo().id());
+                                        *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(std::move(context), std::move(request));
 
   if (ret == CollectorResultCode::STATE_CHANGED) {
     global_stats_->RecordStateTime("commit");
-    std::cout << "[2PC] Commitment::ProcessCommitMsg: Sending commit ack message to " << sender << std::endl;
+    LOG(ERROR) << "[2PC] Sending commit ack message to " << sender;
     replica_communicator_->SendMessage(*ack, sender);
     // Because leaders change, we must keep up on the current sequence 
     message_manager_->IncrementSequence();
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
-}
-
-// =========== private threads ===========================
-// If the transaction is executed, send back to the proxy.
-int Commitment::PostProcessExecutedMsg() {
-  while (!stop_) {
-    auto batch_resp = message_manager_->GetResponseMsg();
-    if (batch_resp == nullptr) {
-      continue;
-    }
-    global_stats_->SendSummary();
-    Request request;
-    request.set_hash(batch_resp->hash());
-    request.set_seq(batch_resp->seq());
-    request.set_type(Request::TYPE_RESPONSE);
-    request.set_sender_id(config_.GetSelfInfo().id());
-    request.set_sender_shard_id(config_.GetSelfShard());
-    request.set_current_view(batch_resp->current_view());
-    request.set_proxy_id(batch_resp->proxy_id());
-    request.set_primary_id(batch_resp->primary_id());
-    LOG(ERROR) << "send back to proxy:" << batch_resp->proxy_id();
-    batch_resp->SerializeToString(request.mutable_data());
-    replica_communicator_->SendMessage(request, request.proxy_id());
-  }
-  return 0;
 }
 
 DuplicateManager* Commitment::GetDuplicateManager() {

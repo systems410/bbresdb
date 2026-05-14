@@ -146,7 +146,6 @@ bool MessageManager::MayConsensusChangeStatus(
       }
       break;
     case Request::TYPE_PREPARE:
-      std::cout << "[PBFT] Received: " << received_count << " need: " << config_.GetMinDataReceiveNum() << std::endl;
       if (*status == TransactionStatue::READY_PREPARE &&
           config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::READY_PREPARE;

@@ -21,14 +21,9 @@
 
 #include "executor/common/custom_query.h"
 #include "platform/config/resdb_config.h"
-#include "platform/consensus/ordering/2pc/checkpoint_manager.h"
 #include "platform/consensus/ordering/2pc/commitment.h"
 #include "platform/consensus/ordering/2pc/message_manager.h"
 #include "platform/consensus/ordering/2pc/performance_manager.h"
-#include "platform/consensus/ordering/2pc/query.h"
-#include "platform/consensus/ordering/2pc/response_manager.h"
-#include "platform/consensus/ordering/2pc/viewchange_manager.h"
-#include "platform/consensus/recovery/recovery.h"
 #include "platform/networkstrate/consensus_manager.h"
 
 namespace resdb {
@@ -106,10 +101,11 @@ class ShardedConsensusManager2PC : public ConsensusManager {
     switch (request->type()) {
 
       case Request::TYPE_NEW_TXNS: {
-        std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received txns message" << std::endl;
+      LOG(ERROR) << "[2PC] Received new txns from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
         system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id());
         int ret = commitment_->ProcessNewRequest(std::move(context),
-                                                std::move(request));
+                                                 std::move(request));
         if (ret == -3) {
           LOG(ERROR) << "TYPE BAD RETURN";
         }
@@ -118,26 +114,30 @@ class ShardedConsensusManager2PC : public ConsensusManager {
 
       // Received by the coordinator, used to count up the number of votes 
       case Request::TYPE_2PC_VOTE_COMMIT: 
-        std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received vote to commit message" << std::endl;
+      LOG(ERROR) << "[2PC] Received commit vote from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
         return commitment_->ProcessVoteMsg(std::move(context), 
-                                          std::move(request));
+                                           std::move(request));
       
 
       // Received by all participants. This is where they will respond with their vote 
       case Request::TYPE_2PC_PREPARE:
-        std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received prepare message" << std::endl;
+        LOG(ERROR) << "[2PC] Received prepare from " 
+                   << request->sender_id() << " with shard id " << request->sender_shard_id();
         system_info_->SetCrossShardPrimaryId(request->sender_id());
         return commitment_->ProcessPrepareMsg(std::move(context),
                                               std::move(request));
 
       // Received by all participants. This is the global descision to commit 
       case Request::TYPE_2PC_COMMIT:
-        std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received commit message" << std::endl;
+        LOG(ERROR) << "[2PC] Received commmit from " 
+                   << request->sender_id() << " with shard id " << request->sender_shard_id();
         return commitment_->ProcessCommitMsg(std::move(context),
-                                            std::move(request));
+                                             std::move(request));
 
       case Request::TYPE_2PC_COMMIT_ACK: 
-        std::cout << "[2PC] ConsensusManager2PC::InternalConsensusCommit: Received commit ack message" << std::endl;
+        LOG(ERROR) << "[2PC] Received commmit ack from " 
+                   << request->sender_id() << " with shard id " << request->sender_shard_id();
         return commitment_->ProcessCommitAckMsg(std::move(context), 
                                                 std::move(request));
 

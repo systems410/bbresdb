@@ -33,7 +33,7 @@
 #include "platform/consensus/ordering/pbft/checkpoint_manager.h"
 #include "platform/consensus/ordering/pbft/lock_free_collector_pool.h"
 #include "platform/consensus/ordering/pbft/transaction_collector.h"
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/networkstrate/server_comm.h"
 #include "platform/proto/checkpoint_info.pb.h"
 #include "platform/proto/resdb.pb.h"

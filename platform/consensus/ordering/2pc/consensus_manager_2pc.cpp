@@ -16,22 +16,3 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-#include "platform/consensus/ordering/2pc/consensus_manager_2pc.h"
-
-#include <glog/logging.h>
-#include <unistd.h>
-
-#include "common/crypto/signature_verifier.h"
-
-namespace resdb {
-
-namespace twopc {
-  
-
-
-
-
-}// namespace 2pc 
-
-}  // namespace resdb

@@ -23,7 +23,7 @@
 #include <unistd.h>
 
 #include "common/utils/utils.h"
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 
 namespace resdb {
 
@@ -248,7 +248,7 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    std::cout << "[PBFT] Sending prepare to shard: " << config_.GetSelfShard() << std::endl;
+    LOG(ERROR) << "[PBFT] Sending prepare to shard " << config_.GetSelfShard();
     replica_communicator_->SendMessageToShard(*prepare_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -257,19 +257,16 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
 // If receive 2f+1 prepare message, broadcast a commit message.
 int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
-  std::cout << "[PBFT] 1" << std::endl;
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
 
-  std::cout << "[PBFT] 2" << std::endl;
   if (request->sender_shard_id() != config_.GetSelfShard()) { 
     LOG(ERROR) << "request does not originate from this shard, reject"; 
     return -2; 
   }
 
-  std::cout << "[PBFT] 3" << std::endl;
   if (request->is_recovery()) {
     uint64_t seq = request->seq();
     CollectorResultCode ret = message_manager_->AddConsensusMsg(
@@ -281,7 +278,6 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     }
     return ret;
   }
-  std::cout << "[PBFT] 4" << std::endl;
   // global_stats_->IncPrepare();
   std::unique_ptr<Request> commit_request = resdb::NewRequest(
       Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
@@ -292,7 +288,6 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   uint64_t seq = request->seq();
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
-  std::cout << "[PBFT] 5" << std::endl;
   if (ret == CollectorResultCode::STATE_CHANGED) {
     if (message_manager_->GetHighestPreparedSeq() < seq) {
       message_manager_->SetHighestPreparedSeq(seq);
@@ -309,7 +304,6 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
       //           << commit_request->data_signature().DebugString();
     }
     global_stats_->RecordStateTime("prepare");
-  std::cout << "[PBFT] 6" << std::endl;
     replica_communicator_->SendMessageToShard(*commit_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;

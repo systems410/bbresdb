@@ -23,7 +23,6 @@
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/execution/duplicate_manager.h"
 #include "platform/consensus/ordering/2pc/message_manager.h"
-#include "platform/consensus/ordering/2pc/response_manager.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
@@ -65,8 +64,6 @@ class Commitment {
   DuplicateManager* GetDuplicateManager();
 
  protected:
-  virtual int PostProcessExecutedMsg();
-
   std::set<uint32_t> GetShardPrimaryIds(); 
 
  protected:
@@ -75,13 +72,10 @@ class Commitment {
   SignatureVerifier* verifier_;
   MessageManager* message_manager_;
   SystemInfo* system_info_; 
-  std::thread executed_thread_;
-  std::atomic<bool> stop_;
   ReplicaCommunicator* replica_communicator_;
 
   Stats* global_stats_;
 
-  std::mutex mutex_;
   std::unique_ptr<DuplicateManager> duplicate_manager_;
 };
 

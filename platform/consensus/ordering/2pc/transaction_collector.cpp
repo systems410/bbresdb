@@ -150,7 +150,6 @@ int TransactionCollector::AddRequest(
 }
 
 int TransactionCollector::Commit(ConsensusManager* replica_cm) {  
-  std::cout << "[2PC] TC::Commit" << std::endl;
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
   bool res = status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,

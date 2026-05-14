@@ -297,7 +297,7 @@ int PerformanceManager::BatchProposeMsg() {
 int PerformanceManager::DoBatch(
     const std::vector<std::unique_ptr<QueueItem>>& batch_req) {
   auto new_request =
-      NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id());
+      NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
   if (new_request == nullptr) {
     return -2;
   }

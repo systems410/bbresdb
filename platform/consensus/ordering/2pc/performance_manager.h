@@ -26,7 +26,7 @@
 
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/ordering/2pc/lock_free_collector_pool.h"
-#include "platform/consensus/ordering/2pc/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/consensus/execution/system_info.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
