@@ -71,6 +71,11 @@ class ReplicaCommunicator {
 
  protected:
 
+
+  uint32_t GetNextPrimary();
+
+  uint32_t GetPrimaryOfShard(uint32_t shard_id);
+
   virtual std::unique_ptr<NetChannel> GetClient(const std::string& ip,
                                                 int port);
   virtual AsyncReplicaClient* GetClientFromPool(const std::string& ip,
@@ -91,6 +96,7 @@ class ReplicaCommunicator {
                         const ReplicaInfo& replica_info);
 
  private:
+
   std::vector<ReplicaInfo> replicas_;
   SignatureVerifier* verifier_;
   std::map<std::pair<std::string, int>, std::unique_ptr<AsyncReplicaClient>>
@@ -117,6 +123,9 @@ class ReplicaCommunicator {
   std::vector<std::thread> single_thread_;
   int tcp_batch_;
   std::mutex smutex_;
+
+  std::vector<uint32_t> shard_primaries_; 
+  uint32_t current_shard_primary_idx_; 
 };
 
 }  // namespace resdb

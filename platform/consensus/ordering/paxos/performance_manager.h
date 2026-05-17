@@ -18,7 +18,11 @@
  */
 
 #pragma once
+
 #include <semaphore.h>
+
+#include <future>
+#include <queue>
 
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/ordering/pbft/lock_free_collector_pool.h"
@@ -26,35 +30,32 @@
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
+
 namespace resdb {
 
-class ResponseClientTimeout {
+class PerformanceClientTimeout {
  public:
-  ResponseClientTimeout(std::string hash_, uint64_t time_);
-  ResponseClientTimeout(const ResponseClientTimeout& other);
-  bool operator<(const ResponseClientTimeout& other) const;
+  PerformanceClientTimeout(std::string hash_, uint64_t time_);
+  PerformanceClientTimeout(const PerformanceClientTimeout& other);
+  bool operator<(const PerformanceClientTimeout& other) const;
 
   std::string hash;
   uint64_t timeout_time;
 };
 
-class ResponseManager {
+class PerformanceManager {
  public:
-  ResponseManager(const ResDBConfig& config,
-                  ReplicaCommunicator* replica_communicator,
-                  SystemInfo* system_info, SignatureVerifier* verifier);
+  PerformanceManager(const ResDBConfig& config,
+                     ReplicaCommunicator* replica_communicator,
+                     SystemInfo* system_info, SignatureVerifier* verifier);
 
-  ~ResponseManager();
+  ~PerformanceManager();
 
-  int AddContextList(std::vector<std::unique_ptr<Context>> context,
-                     uint64_t id);
-  std::vector<std::unique_ptr<Context>> FetchContextList(uint64_t id);
-
-  int NewUserRequest(std::unique_ptr<Context> context,
-                     std::unique_ptr<Request> user_request);
+  int StartEval();
 
   int ProcessResponseMsg(std::unique_ptr<Context> context,
                          std::unique_ptr<Request> request);
+  void SetDataFunc(std::function<std::string()> func);
 
  private:
   // Add response messages which will be sent back to the caller
@@ -75,33 +76,40 @@ class ResponseManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
-  uint32_t GetPrimaryOfShard(uint32_t shard_id); 
+  uint32_t GetNextShardPrimary(); 
+  std::unique_ptr<Request> GenerateUserRequest();
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
-  void RemoveWaitingResponseRequest(const std::string& hash);
+  void RemoveWaitingResponseRequest(std::string hash);
   bool CheckTimeOut(std::string hash);
   void ResponseTimer(std::string hash);
   void MonitoringClientTimeOut();
   std::unique_ptr<Request> GetTimeOutRequest(std::string hash);
 
-  uint32_t GetNextPrimary();
-
-private: 
+ private:
   ResDBConfig config_;
   ReplicaCommunicator* replica_communicator_;
   std::unique_ptr<LockFreeCollectorPool> collector_pool_, context_pool_;
   LockFreeQueue<QueueItem> batch_queue_;
-  std::thread user_req_thread_;
+  std::thread user_req_thread_[16];
   std::atomic<bool> stop_;
-  std::atomic<uint64_t> local_id_;
+  uint64_t local_id_ = 0;
   Stats* global_stats_;
+  std::vector<int> send_num_;
+  std::mutex mutex_;
+  std::atomic<int> total_num_;
   SystemInfo* system_info_;
-  std::atomic<int> send_num_;
   SignatureVerifier* verifier_;
+  SignatureInfo sig_;
+  std::function<std::string()> data_func_;
+  std::future<bool> eval_ready_future_;
+  std::promise<bool> eval_ready_promise_;
+  std::atomic<bool> eval_started_;
+  std::atomic<int> fail_num_;
 
   std::thread checking_timeout_thread_;
   std::map<std::string, std::unique_ptr<Request>> waiting_response_batches_;
-  std::priority_queue<ResponseClientTimeout> client_timeout_min_heap_;
+  std::priority_queue<PerformanceClientTimeout> client_timeout_min_heap_;
   std::mutex pm_lock_;
   uint64_t timeout_length_;
   sem_t request_sent_signal_;

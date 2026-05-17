@@ -17,6 +17,8 @@
 # under the License.
 #
 
+killall -9 kv_service
+killall -9 kv_service_perfo
 
 ./script/deploy.sh $1
 . ./script/load_config.sh $1

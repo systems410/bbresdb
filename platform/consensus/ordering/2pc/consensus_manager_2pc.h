@@ -23,7 +23,6 @@
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/ordering/2pc/commitment.h"
 #include "platform/consensus/ordering/2pc/message_manager.h"
-#include "platform/consensus/ordering/2pc/performance_manager.h"
 #include "platform/networkstrate/consensus_manager.h"
 
 namespace resdb {
@@ -48,14 +47,7 @@ class ShardedConsensusManager2PC : public ConsensusManager {
         config, system_info_, replica_cm_.get())),
     commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
                                             replica_communicator_, GetSignatureVerifier(),
-                                            system_info_)),
-    performance_manager_(config_.IsPerformanceRunning()
-                            ? std::make_unique<PerformanceManager>(
-                                    config_, replica_communicator_,
-                                    system_info_, GetSignatureVerifier())
-                            : nullptr) {
-      LOG(INFO) << "is running is performance mode:"
-                  << config_.IsPerformanceRunning();
+                                            system_info_)) {
       global_stats_ = Stats::GetGlobalStats();
     }
 
@@ -148,10 +140,6 @@ class ShardedConsensusManager2PC : public ConsensusManager {
     return 0;
   }
 
-  void SetupPerformanceDataFunc(
-      std::function<std::string()> func) {
-    performance_manager_->SetDataFunc(func);
-  }
 
 
  protected:
@@ -159,7 +147,6 @@ class ShardedConsensusManager2PC : public ConsensusManager {
   std::unique_ptr<ReplicaCM> replica_cm_; 
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
-  std::unique_ptr<PerformanceManager> performance_manager_;
   Stats* global_stats_;
 
 };

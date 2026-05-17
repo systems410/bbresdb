@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "platform/consensus/ordering/pbft/performance_manager.h"
+#include "platform/consensus/ordering/pbft/response_manager.h"
 
 #include <glog/logging.h>
 
@@ -25,26 +25,27 @@
 
 namespace resdb {
 
-PerformanceClientTimeout::PerformanceClientTimeout(std::string hash_,
-                                                   uint64_t time_) {
+ResponseClientTimeout::ResponseClientTimeout(std::string hash_,
+                                             uint64_t time_) {
   this->hash = hash_;
   this->timeout_time = time_;
 }
 
-PerformanceClientTimeout::PerformanceClientTimeout(
-    const PerformanceClientTimeout& other) {
+ResponseClientTimeout::ResponseClientTimeout(
+    const ResponseClientTimeout& other) {
   this->hash = other.hash;
   this->timeout_time = other.timeout_time;
 }
 
-bool PerformanceClientTimeout::operator<(
-    const PerformanceClientTimeout& other) const {
+bool ResponseClientTimeout::operator<(
+    const ResponseClientTimeout& other) const {
   return timeout_time > other.timeout_time;
 }
 
-PerformanceManager::PerformanceManager(
-    const ResDBConfig& config, ReplicaCommunicator* replica_communicator,
-    SystemInfo* system_info, SignatureVerifier* verifier)
+ResponseManager::ResponseManager(const ResDBConfig& config,
+                                 ReplicaCommunicator* replica_communicator,
+                                 SystemInfo* system_info,
+                                 SignatureVerifier* verifier)
     : config_(config),
       replica_communicator_(replica_communicator),
       collector_pool_(std::make_unique<LockFreeCollectorPool>(
@@ -55,44 +56,33 @@ PerformanceManager::PerformanceManager(
       system_info_(system_info),
       verifier_(verifier) {
   stop_ = false;
-  eval_started_ = false;
-  local_id_ = 0;
-  eval_ready_future_ = eval_ready_promise_.get_future();
+  local_id_ = 1;
+  timeout_length_ = 5000000;
 
   if (config_.GetPublicKeyCertificateInfo()
-          .public_key()
-          .public_key_info()
-          .type() == CertificateKeyInfo::CLIENT) {
-    for (int i = 0; i < 2; ++i) {
-      user_req_thread_[i] =
-          std::thread(&PerformanceManager::BatchProposeMsg, this);
-    }
+              .public_key()
+              .public_key_info()
+              .type() == CertificateKeyInfo::CLIENT ||
+      config_.IsTestMode()) {
+    user_req_thread_ = std::thread(&ResponseManager::BatchProposeMsg, this);
   }
-
-  checking_timeout_thread_ =
-      std::thread(&PerformanceManager::MonitoringClientTimeOut, this);
+  if (config_.GetConfigData().enable_viewchange()) {
+    checking_timeout_thread_ =
+        std::thread(&ResponseManager::MonitoringClientTimeOut, this);
+  }
   global_stats_ = Stats::GetGlobalStats();
-  for (size_t i = 0; i <= config_.GetReplicaNum(config_.GetSelfShard()); i++) {
-    send_num_.push_back(0);
-  }
-  total_num_ = 0;
-  timeout_length_ = 100000000;  // 10s
+  send_num_ = 0;
 
   const std::set<uint32_t>& shards = config_.GetShardIds(); 
   for (uint32_t id : shards) { 
-    if (current_shard_primary_idx_ = 0) { 
-      current_shard_primary_idx_ = id; 
-    }
     shard_primaries_.push_back(id);
   }
 }
 
-PerformanceManager::~PerformanceManager() {
+ResponseManager::~ResponseManager() {
   stop_ = true;
-  for (int i = 0; i < 16; ++i) {
-    if (user_req_thread_[i].joinable()) {
-      user_req_thread_[i].join();
-    }
+  if (user_req_thread_.joinable()) {
+    user_req_thread_.join();
   }
   if (checking_timeout_thread_.joinable()) {
     checking_timeout_thread_.join();
@@ -100,52 +90,49 @@ PerformanceManager::~PerformanceManager() {
 }
 
 // use system info
-int PerformanceManager::GetPrimary() { return system_info_->GetPrimaryId(); }
+int ResponseManager::GetPrimary() { return system_info_->GetPrimaryId(); }
 
-std::unique_ptr<Request> PerformanceManager::GenerateUserRequest() {
-  std::unique_ptr<Request> request = std::make_unique<Request>();
-  request->set_data(data_func_());
-  return request;
+uint32_t ResponseManager::GetPrimaryOfShard(uint32_t shard_id) { return system_info_->GetPrimaryIdOfShard(shard_id); } 
+
+int ResponseManager::AddContextList(
+    std::vector<std::unique_ptr<Context>> context_list, uint64_t id) {
+  return context_pool_->GetCollector(id)->SetContextList(
+      id, std::move(context_list));
 }
 
-void PerformanceManager::SetDataFunc(std::function<std::string()> func) {
-  data_func_ = std::move(func);
+std::vector<std::unique_ptr<Context>> ResponseManager::FetchContextList(
+    uint64_t id) {
+  auto context = context_pool_->GetCollector(id)->FetchContextList(id);
+  context_pool_->Update(id);
+  return context;
 }
 
-int PerformanceManager::StartEval() {
-  if (eval_started_) {
-    return 0;
+int ResponseManager::NewUserRequest(std::unique_ptr<Context> context,
+                                    std::unique_ptr<Request> user_request) {
+  if (!user_request->need_response()) {
+    context->client = nullptr;
   }
-  eval_started_ = true;
-  for (int i = 0; i < 60000000; ++i) {
-    std::unique_ptr<QueueItem> queue_item = std::make_unique<QueueItem>();
-    queue_item->context = nullptr;
-    queue_item->user_request = GenerateUserRequest();
-    batch_queue_.Push(std::move(queue_item));
-    if (i == 2000000) {
-      eval_ready_promise_.set_value(true);
-    }
-  }
-  LOG(WARNING) << "start eval done";
+
+  std::unique_ptr<QueueItem> queue_item = std::make_unique<QueueItem>();
+  queue_item->context = std::move(context);
+  queue_item->user_request = std::move(user_request);
+
+  batch_queue_.Push(std::move(queue_item));
   return 0;
 }
 
 // =================== response ========================
 // handle the response message. If receive f+1 commit messages, send back to the
-// user.
-int PerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> context,
-                                           std::unique_ptr<Request> request) {
+// caller.
+int ResponseManager::ProcessResponseMsg(std::unique_ptr<Context> context,
+                                        std::unique_ptr<Request> request) {
   std::unique_ptr<Request> response;
-  std::string hash = request->hash();
-  int32_t primary_id = request->primary_id();
-  uint64_t seq = request->seq();
   // Add the response message, and use the call back to collect the received
   // messages.
   // The callback will be triggered if it received f+1 messages.
   if (request->ret() == -2) {
-    // LOG(INFO) << "get response fail:" << request->ret();
-    // send_num_--;
-    RemoveWaitingResponseRequest(hash);
+    LOG(ERROR) << "get response fail:" << request->ret();
+    send_num_--;
     return 0;
   }
   CollectorResultCode ret =
@@ -159,15 +146,7 @@ int PerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> context,
   if (ret == CollectorResultCode::STATE_CHANGED) {
     BatchUserResponse batch_response;
     if (batch_response.ParseFromString(response->data())) {
-      if (seq > highest_seq_) {
-        highest_seq_ = seq;
-        if (highest_seq_primary_id_ != primary_id) {
-          system_info_->SetPrimary(primary_id);
-          highest_seq_primary_id_ = primary_id;
-        }
-      }
       SendResponseToClient(batch_response);
-      RemoveWaitingResponseRequest(hash);
     } else {
       LOG(ERROR) << "parse response fail:";
     }
@@ -175,13 +154,12 @@ int PerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> context,
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
-bool PerformanceManager::MayConsensusChangeStatus(
+bool ResponseManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status) {
   switch (type) {
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
-        // SHARD TODO
           config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
@@ -193,15 +171,7 @@ bool PerformanceManager::MayConsensusChangeStatus(
   return false;
 }
 
-uint32_t PerformanceManager::GetNextPrimary() { 
-  uint32_t id = shard_primaries_[current_shard_primary_idx_];
-  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
-    current_shard_primary_idx_ = 0; 
-  } 
-  return id; 
-} 
-
-CollectorResultCode PerformanceManager::AddResponseMsg(
+CollectorResultCode ResponseManager::AddResponseMsg(
     const SignatureInfo& signature, std::unique_ptr<Request> request,
     std::function<void(const Request&,
                        const TransactionCollector::CollectorDataType*)>
@@ -210,19 +180,30 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
     return CollectorResultCode::INVALID;
   }
 
+  std::string hash = request->hash();
+
   std::unique_ptr<BatchUserResponse> batch_response =
       std::make_unique<BatchUserResponse>();
-  if (!batch_response->ParseFromString(request->data()) ||
-      request->seq() == 0) {
+  if (!batch_response->ParseFromString(request->data())) {
     LOG(ERROR) << "parse response fail:" << request->data().size()
                << " seq:" << request->seq();
+    RemoveWaitingResponseRequest(hash);
     return CollectorResultCode::INVALID;
   }
 
+  LOG(ERROR) << " receive request seq:" << request->seq()
+             << " type:" << request->type()
+             << " local id:" << batch_response->local_id();
   uint64_t seq = batch_response->local_id();
+  request->set_seq(seq);
+  if (seq == 0) {
+    LOG(ERROR) << " local id is invalid:" << seq
+               << " request seq:" << request->seq()
+               << " type:" << request->type();
+    return CollectorResultCode::INVALID;
+  }
 
   int type = request->type();
-  seq = request->seq();
   int resp_received_count = 0;
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
       std::move(request), signature, false,
@@ -237,18 +218,16 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
   if (ret != 0) {
     return CollectorResultCode::INVALID;
   }
+  LOG(ERROR) << " get receive count:" << resp_received_count << " seq:" << seq;
   if (resp_received_count > 0) {
     collector_pool_->Update(seq);
+    RemoveWaitingResponseRequest(hash);
     return CollectorResultCode::STATE_CHANGED;
   }
   return CollectorResultCode::OK;
 }
 
-uint32_t PerformanceManager::GetPrimaryOfShard(uint32_t shard_id) { 
-  return system_info_->GetPrimaryIdOfShard(shard_id); 
-}
-
-void PerformanceManager::SendResponseToClient(
+void ResponseManager::SendResponseToClient(
     const BatchUserResponse& batch_response) {
   uint64_t create_time = batch_response.createtime();
   uint64_t local_id = batch_response.local_id();
@@ -258,41 +237,56 @@ void PerformanceManager::SendResponseToClient(
   } else {
     LOG(ERROR) << "seq:" << local_id << " no resp";
   }
-  {
-    // std::lock_guard<std::mutex> lk(mutex_);
-    if (send_num_[batch_response.primary_id()] > 0) {
-      send_num_[batch_response.primary_id()]--;
-    }
-  }
+  send_num_--;
 
   if (config_.IsPerformanceRunning()) {
     return;
   }
+
+  std::vector<std::unique_ptr<Context>> context_list =
+      FetchContextList(batch_response.local_id());
+  if (context_list.empty()) {
+    LOG(ERROR) << "context list is empty. local id:"
+               << batch_response.local_id();
+    return;
+  }
+
+  for (size_t i = 0; i < context_list.size(); ++i) {
+    auto& context = context_list[i];
+    if (context->client == nullptr) {
+      LOG(ERROR) << " no channel:";
+      continue;
+    }
+    int ret = context->client->SendRawMessageData(batch_response.response(i));
+    if (ret) {
+      LOG(ERROR) << "send resp fail ret:" << ret;
+    }
+  }
 }
 
 // =================== request ========================
-int PerformanceManager::BatchProposeMsg() {
-  LOG(WARNING) << "batch wait time:" << config_.ClientBatchWaitTimeMS()
-               << " batch num:" << config_.ClientBatchNum()
-               << " max txn:" << config_.GetMaxProcessTxn();
+int ResponseManager::BatchProposeMsg() {
+  LOG(INFO) << "batch wait time:" << config_.ClientBatchWaitTimeMS()
+            << " batch num:" << config_.ClientBatchNum();
   std::vector<std::unique_ptr<QueueItem>> batch_req;
-  eval_ready_future_.get();
   while (!stop_) {
-    // std::lock_guard<std::mutex> lk(mutex_);
-    if (send_num_[GetPrimaryOfShard(current_shard_primary_idx_)] >= config_.GetMaxProcessTxn()) {
-      usleep(100000);
+    if (send_num_ > config_.GetMaxProcessTxn()) {
+      LOG(ERROR) << "send num too high, wait:" << send_num_;
+      usleep(100);
       continue;
     }
     if (batch_req.size() < config_.ClientBatchNum()) {
       std::unique_ptr<QueueItem> item =
           batch_queue_.Pop(config_.ClientBatchWaitTimeMS());
-      if (item == nullptr) {
-        continue;
+      if (item != nullptr) {
+        batch_req.push_back(std::move(item));
+        if (batch_req.size() < config_.ClientBatchNum()) {
+          continue;
+        }
       }
-      batch_req.push_back(std::move(item));
-      if (batch_req.size() < config_.ClientBatchNum()) {
-        continue;
-      }
+    }
+    if (batch_req.empty()) {
+      continue;
     }
     int ret = DoBatch(batch_req);
     batch_req.clear();
@@ -313,7 +307,7 @@ int PerformanceManager::BatchProposeMsg() {
   return 0;
 }
 
-int PerformanceManager::DoBatch(
+int ResponseManager::DoBatch(
     const std::vector<std::unique_ptr<QueueItem>>& batch_req) {
   auto new_request =
       NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
@@ -326,17 +320,27 @@ int PerformanceManager::DoBatch(
   for (size_t i = 0; i < batch_req.size(); ++i) {
     BatchUserRequest::UserRequest* req = batch_request.add_user_requests();
     *req->mutable_request() = *batch_req[i]->user_request.get();
-    if (batch_req[i]->context) {
-      *req->mutable_signature() = batch_req[i]->context->signature;
-    }
+    *req->mutable_signature() = batch_req[i]->context->signature;
     req->set_id(i);
+    context_list.push_back(std::move(batch_req[i]->context));
   }
 
+  if (!config_.IsPerformanceRunning()) {
+    LOG(ERROR) << "add context list:" << new_request->seq()
+               << " list size:" << context_list.size()
+               << " local_id:" << local_id_;
+    batch_request.set_local_id(local_id_);
+    int ret = AddContextList(std::move(context_list), local_id_++);
+    if (ret != 0) {
+      LOG(ERROR) << "add context list fail:";
+      return ret;
+    }
+  }
   batch_request.set_createtime(GetCurrentTime());
-  batch_request.set_local_id(local_id_++);
-  batch_request.SerializeToString(new_request->mutable_data());
+  std::string data;
+  batch_request.SerializeToString(&data);
   if (verifier_) {
-    auto signature_or = verifier_->SignMessage(new_request->data());
+    auto signature_or = verifier_->SignMessage(data);
     if (!signature_or.ok()) {
       LOG(ERROR) << "Sign message fail";
       return -2;
@@ -344,42 +348,42 @@ int PerformanceManager::DoBatch(
     *new_request->mutable_data_signature() = *signature_or;
   }
 
+  batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
-
-  uint32_t next_primary_shard = GetNextPrimary(); 
-  uint32_t next_primary = GetPrimaryOfShard(next_primary_shard);
-  replica_communicator_->SendMessage(*new_request, next_primary);
-  global_stats_->BroadCastMsg();
-  send_num_[next_primary]++;
-  if (total_num_++ == 1000000) {
-    stop_ = true;
-    LOG(WARNING) << "total num is done:" << total_num_;
-  }
-  if (total_num_ % 10000 == 0) {
-    LOG(WARNING) << "total num is :" << total_num_;
-  }
-  global_stats_->IncClientCall();
+  uint32_t next_primary = GetNextPrimary(); 
+  replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(next_primary));
+  send_num_++;
+  LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
+            << " batch size:" << batch_req.size();
   AddWaitingResponseRequest(std::move(new_request));
   return 0;
 }
 
-void PerformanceManager::AddWaitingResponseRequest(
+void ResponseManager::AddWaitingResponseRequest(
     std::unique_ptr<Request> request) {
   if (!config_.GetConfigData().enable_viewchange()) {
     return;
   }
   pm_lock_.lock();
-  uint64_t time = GetCurrentTime() + this->timeout_length_;
-  client_timeout_min_heap_.push(
-      PerformanceClientTimeout(request->hash(), time));
+  assert(timeout_length_ > 0);
+  uint64_t time = GetCurrentTime() + timeout_length_;
+  client_timeout_min_heap_.push(ResponseClientTimeout(request->hash(), time));
   waiting_response_batches_.insert(
       make_pair(request->hash(), std::move(request)));
   pm_lock_.unlock();
   sem_post(&request_sent_signal_);
 }
 
-void PerformanceManager::RemoveWaitingResponseRequest(std::string hash) {
+uint32_t ResponseManager::GetNextPrimary() { 
+  uint32_t id = shard_primaries_[current_shard_primary_idx_];
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
+    current_shard_primary_idx_ = 0; 
+  } 
+  return id; 
+} 
+
+void ResponseManager::RemoveWaitingResponseRequest(const std::string& hash) {
   if (!config_.GetConfigData().enable_viewchange()) {
     return;
   }
@@ -390,7 +394,7 @@ void PerformanceManager::RemoveWaitingResponseRequest(std::string hash) {
   pm_lock_.unlock();
 }
 
-bool PerformanceManager::CheckTimeOut(std::string hash) {
+bool ResponseManager::CheckTimeOut(std::string hash) {
   pm_lock_.lock();
   bool value =
       (waiting_response_batches_.find(hash) != waiting_response_batches_.end());
@@ -398,15 +402,14 @@ bool PerformanceManager::CheckTimeOut(std::string hash) {
   return value;
 }
 
-std::unique_ptr<Request> PerformanceManager::GetTimeOutRequest(
-    std::string hash) {
+std::unique_ptr<Request> ResponseManager::GetTimeOutRequest(std::string hash) {
   pm_lock_.lock();
   auto value = std::move(waiting_response_batches_.find(hash)->second);
   pm_lock_.unlock();
   return value;
 }
 
-void PerformanceManager::MonitoringClientTimeOut() {
+void ResponseManager::MonitoringClientTimeOut() {
   while (!stop_) {
     sem_wait(&request_sent_signal_);
     pm_lock_.lock();
@@ -430,5 +433,4 @@ void PerformanceManager::MonitoringClientTimeOut() {
     }
   }
 }
-
 }  // namespace resdb

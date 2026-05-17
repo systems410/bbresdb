@@ -75,6 +75,9 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
 
   const std::set<uint32_t>& shards = config_.GetShardIds(); 
   for (uint32_t id : shards) { 
+    if (current_shard_primary_idx_ = 0) { 
+      current_shard_primary_idx_ = id; 
+    }
     shard_primaries_.push_back(id);
   }
 }
