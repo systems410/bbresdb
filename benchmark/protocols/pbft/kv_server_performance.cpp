@@ -23,6 +23,7 @@
 #include "executor/kv/kv_executor.h"
 #include "platform/config/resdb_config_utils.h"
 #include "platform/consensus/ordering/pbft/consensus_manager_pbft.h"
+#include "platform/consensus/ordering/2pc/consensus_manager_2pc.h"
 #include "platform/networkstrate/service_network.h"
 #include "platform/statistic/stats.h"
 #include "proto/kv/kv.pb.h"
@@ -63,7 +64,7 @@ int main(int argc, char** argv) {
 
   config->RunningPerformance(true);
 
-  auto performance_consens = std::make_unique<ConsensusManagerPBFT>(
+  auto performance_consens = std::make_unique<twopc::ShardedConsensusManager2PC<ConsensusManagerPBFT>>(
       *config, std::make_unique<KVExecutor>(std::make_unique<MemoryDB>()));
   performance_consens->SetupPerformanceDataFunc([]() {
     KVRequest request;

@@ -63,6 +63,9 @@ class ShardedConsensusManager2PC : public ConsensusManager {
     return ret;
   }
 
+  void SetupPerformanceDataFunc(std::function<std::string()> func) { 
+    replica_cm_->SetupPerformanceDataFunc(func);
+  }
 
   uint32_t GetPrimary() override {
     return system_info_->GetCrossShardPrimaryId();
