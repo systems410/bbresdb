@@ -27,6 +27,7 @@ cc_library(
         "//platform/config:resdb_config_utils",
         "//platform/consensus/ordering/pbft:consensus_manager_pbft",
         "//platform/consensus/ordering/2pc:consensus_manager_2pc",
+        "//platform/consensus/ordering/paxos:consensus_manager_paxos",
         "//platform/networkstrate:service_network",
     ],
 )
