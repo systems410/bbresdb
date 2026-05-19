@@ -42,12 +42,17 @@ class Commitment {
   virtual int ProcessNewRequest(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> user_request); 
 
-  virtual int ProcessProposeMsg(std::unique_ptr<Context> context,
-                                std::unique_ptr<Request> request);
   virtual int ProcessPrepareMsg(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> request);
+
   virtual int ProcessCommitMsg(std::unique_ptr<Context> context,
                                std::unique_ptr<Request> request);
+
+  int ProcessPromiseMsg(std::unique_ptr<Context> context, 
+                        std::unique_ptr<Request> request);
+
+  int ProcessAcceptMsg(std::unique_ptr<Context> context, 
+                       std::unique_ptr<Request> request);
 
   void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
   void SetNeedCommitQC(bool need_qc);
