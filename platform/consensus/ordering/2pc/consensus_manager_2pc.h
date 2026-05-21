@@ -64,7 +64,7 @@ class ShardedConsensusManager2PC : public ConsensusManager {
   }
 
   void SetupPerformanceDataFunc(std::function<std::string()> func) { 
-    replica_cm_->SetupPerformanceDataFunc(func);
+    replica_cm_->SetupPerformanceDataFunc(std::move(func));
   }
 
   uint32_t GetPrimary() override {

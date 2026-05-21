@@ -193,7 +193,7 @@ bool PerformanceManager::MayConsensusChangeStatus(
   return false;
 }
 
-uint32_t PerformanceManager::GetNextPrimary() { 
+uint32_t PerformanceManager::GetNextShardPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
   if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
     current_shard_primary_idx_ = 0; 
@@ -280,6 +280,9 @@ int PerformanceManager::BatchProposeMsg() {
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
     if (send_num_[GetPrimaryOfShard(current_shard_primary_idx_)] >= config_.GetMaxProcessTxn()) {
+      std::cout << "[PERFDEBUG] Send num of id " << GetPrimaryOfShard(current_shard_primary_idx_)
+                << " has reached " << config_.GetMaxProcessTxn() << std::endl;
+
       usleep(100000);
       continue;
     }
@@ -347,8 +350,9 @@ int PerformanceManager::DoBatch(
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
 
-  uint32_t next_primary_shard = GetNextPrimary(); 
+  uint32_t next_primary_shard = GetNextShardPrimary(); 
   uint32_t next_primary = GetPrimaryOfShard(next_primary_shard);
+  LOG(ERROR) << "[PERFDEBUG] Next shard is " << next_primary_shard << " with id " << next_primary; 
   replica_communicator_->SendMessage(*new_request, next_primary);
   global_stats_->BroadCastMsg();
   send_num_[next_primary]++;
