@@ -96,8 +96,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2; 
   }
 
-  // SHARD TODO 
-  // check signatures
   bool valid = verifier_->VerifyMessage(user_request->data(),
                                         user_request->data_signature());
   if (!valid) {
@@ -148,7 +146,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
 }
-
 
 
 // Receive the pre-prepare message from the primary.

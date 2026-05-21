@@ -195,6 +195,7 @@ uint32_t PerformanceManager::GetNextShardPrimary() {
   if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
     current_shard_primary_idx_ = 0; 
   } 
+  LOG(ERROR) << "[PERFDEBUG] Next shard primary is: " << id << std::endl;
   return id; 
 } 
 

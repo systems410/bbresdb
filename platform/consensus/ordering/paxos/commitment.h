@@ -48,6 +48,9 @@ class Commitment {
   virtual int ProcessCommitMsg(std::unique_ptr<Context> context,
                                std::unique_ptr<Request> request);
 
+  virtual int ProcessProposeMsg(std::unique_ptr<Context> context, 
+                                std::unique_ptr<Request> request);
+
   int ProcessPromiseMsg(std::unique_ptr<Context> context, 
                         std::unique_ptr<Request> request);
 
