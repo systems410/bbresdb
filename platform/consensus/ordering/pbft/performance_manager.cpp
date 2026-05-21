@@ -72,7 +72,7 @@ PerformanceManager::PerformanceManager(
   checking_timeout_thread_ =
       std::thread(&PerformanceManager::MonitoringClientTimeOut, this);
   global_stats_ = Stats::GetGlobalStats();
-  for (size_t i = 0; i <= config_.GetReplicaNum(config_.GetSelfShard()); i++) {
+  for (size_t i = 0; i <= system_info_->GetAllShardPrimaryIds().size(); i++) {
     send_num_.push_back(0);
   }
   total_num_ = 0;
@@ -181,7 +181,6 @@ bool PerformanceManager::MayConsensusChangeStatus(
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
-        // SHARD TODO
           config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
@@ -280,8 +279,6 @@ int PerformanceManager::BatchProposeMsg() {
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
     if (send_num_[GetPrimaryOfShard(current_shard_primary_idx_)] >= config_.GetMaxProcessTxn()) {
-      std::cout << "[PERFDEBUG] Send num of id " << GetPrimaryOfShard(current_shard_primary_idx_)
-                << " has reached " << config_.GetMaxProcessTxn() << std::endl;
 
       usleep(100000);
       continue;
@@ -352,7 +349,6 @@ int PerformanceManager::DoBatch(
 
   uint32_t next_primary_shard = GetNextShardPrimary(); 
   uint32_t next_primary = GetPrimaryOfShard(next_primary_shard);
-  LOG(ERROR) << "[PERFDEBUG] Next shard is " << next_primary_shard << " with id " << next_primary; 
   replica_communicator_->SendMessage(*new_request, next_primary);
   global_stats_->BroadCastMsg();
   send_num_[next_primary]++;
