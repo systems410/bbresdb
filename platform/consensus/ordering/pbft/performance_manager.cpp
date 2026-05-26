@@ -79,10 +79,8 @@ PerformanceManager::PerformanceManager(
   timeout_length_ = 100000000;  // 10s
 
   const std::set<uint32_t>& shards = config_.GetShardIds(); 
+  uint32_t current_shard_primary_idx_ = *shards.begin();
   for (uint32_t id : shards) { 
-    if (current_shard_primary_idx_ = 0) { 
-      current_shard_primary_idx_ = id; 
-    }
     shard_primaries_.push_back(id);
   }
 }
