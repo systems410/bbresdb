@@ -72,8 +72,9 @@ message Request {
         TYPE_PAXOS_PROMISE = 29; 
         TYPE_PAXOS_ACCEPT = 30; 
         TYPE_PAXOS_LEARN = 31;
+        TYPE_PAXOS_ACCEPT_REQUEST = 32;
 
-        NUM_OF_TYPE = 32; // the total number of types.
+        NUM_OF_TYPE = 33; // the total number of types.
                        // Used to create the collector.
     };
     int32 type = 1;
@@ -106,6 +107,10 @@ message Request {
     bytes data_hash = 26;
     bool force_recovery =27;
     uint32 sender_shard_id = 28;
+    int32 paxos_id = 29; 
+
+    optional int32 accepted_paxos_id = 30; 
+    optional int32 accepted_node_id = 31; 
 
 }
 

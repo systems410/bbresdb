@@ -29,6 +29,7 @@
 namespace resdb {
 namespace paxos {
 
+
 enum TransactionStatue {
   None = 0,
   Prepare = -999,
@@ -36,6 +37,7 @@ enum TransactionStatue {
   READY_COMMIT = 2,
   READY_EXECUTE = 3,
   EXECUTED = 4,
+  NEW_PROMISE = 5, 
 };
 
 
@@ -80,13 +82,10 @@ class AtomicUniquePtr {
 
 class TransactionCollector {
  public:
-  TransactionCollector(uint64_t seq, TransactionExecutor* executor,
-                       bool enable_viewchange = false)
+  TransactionCollector(uint64_t seq, TransactionExecutor* executor)
       : seq_(seq),
         executor_(executor),
-        status_(TransactionStatue::None),
-        enable_viewchange_(enable_viewchange),
-        view_(0) {}
+        status_(TransactionStatue::None) {}
 
   ~TransactionCollector() = default;
 
@@ -106,11 +105,16 @@ class TransactionCollector {
       bool is_main_request,
       std::function<void(const Request&, int received_count,
                          CollectorDataType* data,
-                         std::atomic<TransactionStatue>* status, bool force)>
+                         std::atomic<TransactionStatue>* status, 
+                         bool has_promised_higher)>
           call_back);
 
   std::vector<RequestInfo> GetPreparedProof();
   TransactionStatue GetStatus() const;
+
+  bool HasAccepted() const { return has_accepted_; } 
+
+  std::pair<int32_t, int32_t> GetAcceptedIds() const { return { highest_promise_id_, highest_promise_node_id_}; }
 
   uint64_t Seq();
 
@@ -132,12 +136,15 @@ class TransactionCollector {
   std::vector<std::unique_ptr<RequestInfo>> prepared_proof_;
   AtomicUniquePtr<RequestInfo> atomic_main_request_;
   std::atomic<TransactionStatue> status_ = TransactionStatue::None;
-  bool enable_viewchange_;
   std::mutex mutex_;
   std::vector<SignatureInfo> commit_certs_;
   std::map<std::string, std::bitset<128>> senders_[Request::NUM_OF_TYPE];
+  std::map<int32_t, uint32_t> num_of_promises_; 
   std::set<std::unique_ptr<RequestInfo>> other_main_request_;
-  uint64_t view_;
+
+  std::atomic<int32_t> highest_promise_id_ = -1; 
+  std::atomic<int32_t> highest_promise_node_id_ = -1; 
+  std::atomic<bool> has_accepted_ = false; 
 };
 } // namespace paxos
 }  // namespace resdb

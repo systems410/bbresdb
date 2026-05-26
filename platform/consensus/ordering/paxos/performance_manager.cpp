@@ -24,6 +24,7 @@
 #include "common/utils/utils.h"
 
 namespace resdb {
+
 namespace paxos {
 
 PerformanceClientTimeout::PerformanceClientTimeout(std::string hash_,
@@ -73,7 +74,7 @@ PerformanceManager::PerformanceManager(
   checking_timeout_thread_ =
       std::thread(&PerformanceManager::MonitoringClientTimeOut, this);
   global_stats_ = Stats::GetGlobalStats();
-  for (size_t i = 0; i <= config_.GetReplicaNum(config_.GetSelfShard()); i++) {
+  for (size_t i = 0; i <= system_info_->GetAllShardPrimaryIds().size(); i++) {
     send_num_.push_back(0);
   }
   total_num_ = 0;
@@ -81,6 +82,9 @@ PerformanceManager::PerformanceManager(
 
   const std::set<uint32_t>& shards = config_.GetShardIds(); 
   for (uint32_t id : shards) { 
+    if (current_shard_primary_idx_ == 0) { 
+      current_shard_primary_idx_ = id; 
+    }
     shard_primaries_.push_back(id);
   }
 }
@@ -179,7 +183,6 @@ bool PerformanceManager::MayConsensusChangeStatus(
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
-        // SHARD TODO
           config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
@@ -242,6 +245,10 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
   return CollectorResultCode::OK;
 }
 
+uint32_t PerformanceManager::GetPrimaryOfShard(uint32_t shard_id) { 
+  return system_info_->GetPrimaryIdOfShard(shard_id); 
+}
+
 void PerformanceManager::SendResponseToClient(
     const BatchUserResponse& batch_response) {
   uint64_t create_time = batch_response.createtime();
@@ -273,7 +280,8 @@ int PerformanceManager::BatchProposeMsg() {
   eval_ready_future_.get();
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
-    if (send_num_[GetPrimary()] >= config_.GetMaxProcessTxn()) {
+    if (send_num_[GetPrimaryOfShard(current_shard_primary_idx_)] >= config_.GetMaxProcessTxn()) {
+
       usleep(100000);
       continue;
     }
@@ -341,9 +349,11 @@ int PerformanceManager::DoBatch(
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
 
-  replica_communicator_->SendMessage(*new_request, GetPrimary());
+  uint32_t next_primary_shard = GetNextShardPrimary(); 
+  uint32_t next_primary = GetPrimaryOfShard(next_primary_shard);
+  replica_communicator_->SendMessage(*new_request, next_primary);
   global_stats_->BroadCastMsg();
-  send_num_[GetPrimary()]++;
+  send_num_[next_primary]++;
   if (total_num_++ == 1000000) {
     stop_ = true;
     LOG(WARNING) << "total num is done:" << total_num_;
@@ -423,4 +433,5 @@ void PerformanceManager::MonitoringClientTimeOut() {
   }
 }
 } // namespace paxos 
+
 }  // namespace resdb

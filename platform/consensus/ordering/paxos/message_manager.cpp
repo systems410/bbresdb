@@ -123,18 +123,25 @@ bool MessageManager::IsValidMsg(const Request& request) {
 
 bool MessageManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status,
-    bool ret) {
+    bool has_promised_higher) {
   switch (type) {
-    case Request::TYPE_PRE_PREPARE:
-      if (*status == TransactionStatue::None) {
+    case Request::TYPE_PAXOS_PREPARE:
+      if ((*status == TransactionStatue::None)) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
-            old_status, TransactionStatue::READY_PREPARE,
+            old_status, TransactionStatue::NEW_PROMISE,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+      } else if (*status == TransactionStatue::NEW_PROMISE && !has_promised_higher) { 
+        TransactionStatue old_status = TransactionStatue::NEW_PROMISE;
+        return status->compare_exchange_strong(
+            old_status, TransactionStatue::NEW_PROMISE,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }
       break;
-    case Request::TYPE_PREPARE:
-      if (*status == TransactionStatue::READY_PREPARE &&
+      // TODO: Option A: different states for acceptor and proposer. This is cleaner but more refactoring
+      //       Option B: Can transition to accept state from any state? this sounds easier
+    case Request::TYPE_PAXOS_PROMISE:
+      if (*status == TransactionStatue::READY_PROMISE &&
           config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
@@ -152,7 +159,7 @@ bool MessageManager::MayConsensusChangeStatus(
       }
       break;
   }
-  return ret;
+  return false;
 }
 
 // Add commit messages and return the number of messages have been received.
@@ -174,11 +181,11 @@ CollectorResultCode MessageManager::AddConsensusMsg(
   int proxy_id = request->proxy_id();
 
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
-      std::move(request), signature, type == Request::TYPE_PRE_PREPARE,
+      std::move(request), signature, type == Request::TYPE_PAXOS_ACCEPT_REQUEST,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
-          std::atomic<TransactionStatue>* status, bool force) {
-        if (MayConsensusChangeStatus(type, received_count, status, force)) {
+          std::atomic<TransactionStatue>* status, bool promised_higher) {
+        if (MayConsensusChangeStatus(type, received_count, status, promised_higher)) {
           resp_received_count = 1;
         }
       });
@@ -232,6 +239,14 @@ uint64_t MessageManager::GetLastCommittedTime(uint64_t proxy_id) {
 
 bool MessageManager::IsPreapared(uint64_t seq) {
   return collector_pool_->GetCollector(seq)->IsPrepared();
+}
+
+bool MessageManager::HasAccepted(uint64_t seq) { 
+  return collector_pool_->GetCollector(seq)->HasAccepted(); 
+}
+
+std::pair<int32_t, int32_t> MessageManager::GetAcceptedIds(uint64_t seq) const { 
+  return collector_pool_->GetCollector(seq)->GetAcceptedIds(); 
 }
 
 uint64_t MessageManager::GetHighestPreparedSeq() {

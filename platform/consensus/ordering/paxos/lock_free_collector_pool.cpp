@@ -44,11 +44,9 @@ LockFreeCollectorPool::LockFreeCollectorPool(const std::string& name,
       enable_viewchange_(enable_viewchange) {
   collector_.resize(capacity_ << 1);
   for (size_t i = 0; i < (capacity_ << 1); ++i) {
-    collector_[i] = std::make_unique<TransactionCollector>(i, executor_,
-                                                           enable_viewchange_);
+    collector_[i] = std::make_unique<TransactionCollector>(i, executor_);
   }
-  LOG(ERROR) << "name:" << name_ << " create pool done. capacity:" << capacity_
-             << " enable viewchange:" << enable_viewchange_ << " done";
+  LOG(ERROR) << "name:" << name_ << " create pool done. capacity:" << capacity_;
 }
 
 void LockFreeCollectorPool::Reset(uint64_t start_seq) {
@@ -58,7 +56,7 @@ void LockFreeCollectorPool::Reset(uint64_t start_seq) {
   for (size_t i = 0; i < (capacity_ << 1); ++i) {
     int pos = (i + idx) % (capacity_ << 1);
     collector_[pos] = std::make_unique<TransactionCollector>(
-        seq++, executor_, enable_viewchange_);
+        seq++, executor_);
   }
   LOG(ERROR) << " reset collector:" << start_seq;
 }
@@ -72,7 +70,7 @@ void LockFreeCollectorPool::Update(uint64_t seq) {
   LOG(ERROR) << " update:" << (idx ^ capacity_) << " seq:" << seq + capacity_
              << " cap:" << capacity_ << " update seq:" << seq;
   collector_[idx ^ capacity_] = std::make_unique<TransactionCollector>(
-      seq + capacity_, executor_, enable_viewchange_);
+      seq + capacity_, executor_);
 }
 
 TransactionCollector* LockFreeCollectorPool::GetCollector(uint64_t seq) {

@@ -97,6 +97,10 @@ class MessageManager {
 
   bool IsPreapared(uint64_t seq);
 
+  bool HasAccepted(uint64_t seq);
+
+  std::pair<int32_t, int32_t> GetAcceptedIds(uint64_t seq) const; 
+
   uint64_t GetHighestPreparedSeq();
 
   void SetHighestPreparedSeq(uint64_t seq);
@@ -112,7 +116,7 @@ class MessageManager {
 
   bool MayConsensusChangeStatus(int type, int received_count,
                                 std::atomic<TransactionStatue>* status,
-                                bool force);
+                                bool promised_higher);
 
  private:
   ResDBConfig config_;

@@ -71,7 +71,7 @@ int TransactionCollector::AddRequest(
     std::unique_ptr<Request> request, const SignatureInfo& signature,
     bool is_main_request,
     std::function<void(const Request&, int received_count, CollectorDataType*,
-                       std::atomic<TransactionStatue>* status, bool force)>
+                       std::atomic<TransactionStatue>* status, bool has_promised_higher)>
         call_back) {
   if (request == nullptr) {
     LOG(ERROR) << "request empty";
@@ -82,7 +82,6 @@ int TransactionCollector::AddRequest(
   std::string hash = request->hash();
   int type = request->type();
   uint64_t seq = request->seq();
-  uint64_t view = request->current_view();
   if (is_committed_) {
     return -2;
   }
@@ -96,15 +95,26 @@ int TransactionCollector::AddRequest(
     return -2;
   }
 
+  bool promised_higher = false; 
+  if (request->paxos_id() == highest_promise_id_) { 
+    promised_higher = request->sender_id() < highest_promise_node_id_;  
+  } else { 
+    promised_higher = request->paxos_id() < highest_promise_id_; 
+  }
+
+  if (!promised_higher) { 
+    highest_promise_id_ = request->paxos_id(); 
+    highest_promise_node_id_ = request->sender_id(); 
+  }
+
+  if (request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST && !promised_higher) { 
+    has_accepted_ = true; 
+  }
+
   if (is_main_request) {
     auto request_info = std::make_unique<RequestInfo>();
     request_info->signature = signature;
     request_info->request = std::move(request);
-    bool force = false;
-    if (view_ && view_ < view && !is_prepared_) {
-      force = true;
-      atomic_main_request_.Clear();
-    }
     int ret = atomic_main_request_.Set(request_info);
     if (!ret) {
       other_main_request_.insert(std::move(request_info));
@@ -117,57 +127,9 @@ int TransactionCollector::AddRequest(
       LOG(ERROR) << "set main request data fail";
       return -2;
     }
-    view_ = view;
-    call_back(*main_request->request.get(), 1, nullptr, &status_, force);
+    call_back(*main_request->request.get(), 1, nullptr, &status_, promised_higher);
     return 0;
   } else {
-    if (enable_viewchange_) {
-      if (type == Request::TYPE_PREPARE) {
-        if (status_.load() <= TransactionStatue::READY_PREPARE) {
-          auto request_info = std::make_unique<RequestInfo>();
-          request_info->signature = signature;
-          request_info->request = std::make_unique<Request>(*request);
-          std::lock_guard<std::mutex> lk(mutex_);
-          if (is_prepared_) {
-            return 0;
-          }
-          prepared_proof_.push_back(std::move(request_info));
-          if (senders_[type].count(hash) == 0) {
-            senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
-          }
-          senders_[type][hash][sender_id] = 1;
-          call_back(*request, senders_[type][hash].count(), nullptr, &status_,
-                    false);
-          if (status_.load() == TransactionStatue::READY_COMMIT) {
-            is_prepared_ = true;
-            if (atomic_main_request_.Reference() != nullptr &&
-                atomic_main_request_.Reference()->request->hash() != hash) {
-              atomic_main_request_.Clear();
-              for (auto it = other_main_request_.begin();
-                   it != other_main_request_.end(); it++) {
-                if ((*it)->request->hash() == hash) {
-                  auto request_info = std::make_unique<RequestInfo>();
-                  request_info->signature = (*it)->signature;
-                  request_info->request = std::move((*it)->request);
-                  atomic_main_request_.Set(request_info);
-                  break;
-                }
-              }
-              other_main_request_.clear();
-            }
-            int pos = 0;
-            for (size_t i = 0; i < prepared_proof_.size(); i++) {
-              if (prepared_proof_[i]->request->hash() == hash) {
-                prepared_proof_[pos++] = std::move(prepared_proof_[i]);
-              }
-            }
-            prepared_proof_.erase(prepared_proof_.begin() + pos,
-                                  prepared_proof_.end());
-          }
-        }
-        return 0;
-      }
-    }
     if (request->type() == Request::TYPE_COMMIT) {
       if (request->has_data_signature() &&
           request->data_signature().node_id() > 0) {
@@ -179,12 +141,21 @@ int TransactionCollector::AddRequest(
 
     {
       std::lock_guard<std::mutex> lk(mutex_);
-      if (senders_[type].count(hash) == 0) {
-        senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
+      uint32_t count = 1; 
+      if (request->type() == Request::TYPE_PAXOS_PROMISE) { 
+        // If the node has not accepted before, we know they are promising for this id 
+        if (!request->has_accepted_node_id()) { 
+          num_of_promises_[request->paxos_id()]++; 
+          count = num_of_promises_[request->paxos_id()];
+        }
+      } else { 
+        if (senders_[type].count(hash) == 0) {
+          senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
+        }
+        senders_[type][hash][sender_id] = 1;
+        count = senders_[type][hash].count(); 
       }
-      senders_[type][hash][sender_id] = 1;
-      call_back(*request, senders_[type][hash].count(), nullptr, &status_,
-                false);
+      call_back(*request, count, nullptr, &status_, promised_higher);
     }
 
     if (status_.load() == TransactionStatue::READY_EXECUTE) {

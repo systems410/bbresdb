@@ -66,6 +66,30 @@ void Commitment::SetPreVerifyFunc(
 
 void Commitment::SetNeedCommitQC(bool need_qc) { need_qc_ = need_qc; }
 
+int Commitment::ProcessPromiseMsg(std::unique_ptr<Context> context, 
+                                  std::unique_ptr<Request> request) { 
+
+  if (context == nullptr || context->signature.signature().empty()) {
+    LOG(ERROR) << "user request doesn't contain signature, reject"
+               << " context:" << (context == nullptr);
+    return -2;
+  }
+
+  if (request->sender_shard_id() != config_.GetSelfShard()) { 
+    LOG(ERROR) << "request does not originate from this shard, reject"; 
+    return -2; 
+  }
+
+
+
+
+  return 0; 
+}
+
+int Commitment::ProcessAcceptMsg(std::unique_ptr<Context> context, 
+                                 std::unique_ptr<Request> request) { 
+  return 0; 
+}
 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> user_request) {
@@ -80,11 +104,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
               << message_manager_->GetCurrentPrimary();
     replica_communicator_->SendMessage(*user_request,
                                        message_manager_->GetCurrentPrimary());
-    {
-      std::lock_guard<std::mutex> lk(rc_mutex_);
-      request_complained_.push(
-          std::make_pair(std::move(context), std::move(user_request)));
-    }
     return -3;
   }
 
@@ -138,11 +157,12 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   global_stats_->RecordStateTime("request");
 
   user_request->set_current_view(message_manager_->GetCurrentView());
-  user_request->set_type(Request::TYPE_PRE_PREPARE);
+  user_request->set_type(Request::TYPE_PAXOS_PREPARE);
   user_request->set_sender_shard_id(config_.GetSelfShard());
   user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
+  user_request->set_paxos_id(1);
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
 }
@@ -253,7 +273,6 @@ int Commitment::ProcessProposeMsg(std::unique_ptr<Context> context,
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
 
-// If receive 2f+1 prepare message, broadcast a commit message.
 int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> request) {
   if (context == nullptr || context->signature.signature().empty()) {
@@ -266,24 +285,10 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     return -2; 
   }
 
-  if (request->is_recovery()) {
-    uint64_t seq = request->seq();
-    CollectorResultCode ret = message_manager_->AddConsensusMsg(
-        context->signature, std::move(request));
-    if (ret == CollectorResultCode::STATE_CHANGED) {
-      if (message_manager_->GetHighestPreparedSeq() < seq) {
-        message_manager_->SetHighestPreparedSeq(seq);
-      }
-    }
-    return ret;
-  }
-  // global_stats_->IncPrepare();
-  std::unique_ptr<Request> commit_request = resdb::NewRequest(
-      Request::TYPE_COMMIT, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
-  commit_request->mutable_data_signature()->Clear();
-  // Add request to message_manager.
-  // If it has received enough same requests(2f+1), broadcast the commit
-  // message.
+  std::unique_ptr<Request> promise_request = resdb::NewRequest(
+      Request::TYPE_PAXOS_PROMISE, *request, config_.GetSelfInfo().id(), config_.GetSelfShard());
+
+  promise_request->mutable_data_signature()->Clear();
   uint64_t seq = request->seq();
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
@@ -293,17 +298,21 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     }
     // If need qc, sign the data
     if (need_qc_ && verifier_) {
-      auto signature_or = verifier_->SignMessage(commit_request->hash());
+      auto signature_or = verifier_->SignMessage(promise_request->hash());
       if (!signature_or.ok()) {
         LOG(ERROR) << "Sign message fail";
         return -2;
       }
-      *commit_request->mutable_data_signature() = *signature_or;
-      // LOG(ERROR) << "sign hash"
-      //           << commit_request->data_signature().DebugString();
+      *promise_request->mutable_data_signature() = *signature_or;
     }
+    if (message_manager_->HasAccepted(seq)) { 
+      auto [accepted_id, accepted_node_id] = message_manager_->GetAcceptedIds(seq); 
+      request->set_accepted_paxos_id(accepted_id); 
+      request->set_accepted_node_id(accepted_node_id);
+    }
+
     global_stats_->RecordStateTime("prepare");
-    replica_communicator_->SendMessageToShard(*commit_request, config_.GetSelfShard());
+    replica_communicator_->SendMessageToShard(*promise_request, config_.GetSelfShard());
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }

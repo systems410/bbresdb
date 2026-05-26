@@ -32,7 +32,8 @@
 
 
 namespace resdb {
-namespace paxos {
+
+namespace paxos { 
 
 class PerformanceClientTimeout {
  public:
@@ -79,6 +80,7 @@ class PerformanceManager {
   int GetPrimary();
   uint32_t GetNextShardPrimary(); 
   std::unique_ptr<Request> GenerateUserRequest();
+  uint32_t GetPrimaryOfShard(uint32_t shard_id); 
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
   void RemoveWaitingResponseRequest(std::string hash);
@@ -122,4 +124,5 @@ class PerformanceManager {
 };
 
 } // namespace paxos 
+
 }  // namespace resdb
