@@ -190,10 +190,11 @@ bool PerformanceManager::MayConsensusChangeStatus(
   return false;
 }
 
-uint32_t PerformanceManager::GetNextShardPrimary() { 
+uint32_t PerformanceManager::GetNextPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
   if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
-    current_shard_primary_idx_ = 0; 
+    const std::set<uint32_t>& shards = config_.GetShardIds(); 
+    uint32_t current_shard_primary_idx_ = *shards.begin();
   } 
   return id; 
 } 
@@ -345,8 +346,7 @@ int PerformanceManager::DoBatch(
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
 
-  uint32_t next_primary_shard = GetNextShardPrimary(); 
-  uint32_t next_primary = GetPrimaryOfShard(next_primary_shard);
+  uint32_t next_primary = GetNextPrimary(); 
   replica_communicator_->SendMessage(*new_request, next_primary);
   global_stats_->BroadCastMsg();
   send_num_[next_primary]++;

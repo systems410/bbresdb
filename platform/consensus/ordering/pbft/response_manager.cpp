@@ -74,10 +74,8 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
   send_num_ = 0;
 
   const std::set<uint32_t>& shards = config_.GetShardIds(); 
+  uint32_t current_shard_primary_idx_ = *shards.begin();
   for (uint32_t id : shards) { 
-    if (current_shard_primary_idx_ = 0) { 
-      current_shard_primary_idx_ = id; 
-    }
     shard_primaries_.push_back(id);
   }
 }
@@ -355,7 +353,7 @@ int ResponseManager::DoBatch(
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
   uint32_t next_primary = GetNextPrimary(); 
-  replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(next_primary));
+  replica_communicator_->SendMessage(*new_request, next_primary);
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
             << " batch size:" << batch_req.size();
@@ -381,7 +379,8 @@ void ResponseManager::AddWaitingResponseRequest(
 uint32_t ResponseManager::GetNextPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
   if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
-    current_shard_primary_idx_ = 0; 
+    const std::set<uint32_t>& shards = config_.GetShardIds(); 
+    uint32_t current_shard_primary_idx_ = *shards.begin();
   } 
   return id; 
 } 

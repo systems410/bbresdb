@@ -76,7 +76,7 @@ class PerformanceManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
-  uint32_t GetNextShardPrimary(); 
+  uint32_t GetNextPrimary(); 
   std::unique_ptr<Request> GenerateUserRequest();
   uint32_t GetPrimaryOfShard(uint32_t shard_id); 
 
