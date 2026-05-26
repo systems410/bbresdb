@@ -73,9 +73,7 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
   global_stats_ = Stats::GetGlobalStats();
   send_num_ = 0;
 
-  const std::set<uint32_t>& shards = config_.GetShardIds(); 
-  uint32_t current_shard_primary_idx_ = *shards.begin();
-  for (uint32_t id : shards) { 
+  for (auto id : config_.GetShardIds()) { 
     shard_primaries_.push_back(id);
   }
 }
@@ -378,9 +376,8 @@ void ResponseManager::AddWaitingResponseRequest(
 
 uint32_t ResponseManager::GetNextPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
-  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
-    const std::set<uint32_t>& shards = config_.GetShardIds(); 
-    uint32_t current_shard_primary_idx_ = *shards.begin();
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) {
+    current_shard_primary_idx_ = 0; 
   } 
   return id; 
 } 

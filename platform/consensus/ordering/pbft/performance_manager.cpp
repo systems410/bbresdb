@@ -192,9 +192,8 @@ bool PerformanceManager::MayConsensusChangeStatus(
 
 uint32_t PerformanceManager::GetNextPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
-  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
-    const std::set<uint32_t>& shards = config_.GetShardIds(); 
-    uint32_t current_shard_primary_idx_ = *shards.begin();
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) {
+    current_shard_primary_idx_ = 0; 
   } 
   return id; 
 } 

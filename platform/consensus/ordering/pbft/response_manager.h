@@ -109,7 +109,8 @@ private:
   uint64_t highest_seq_primary_id_;
 
   std::vector<uint32_t> shard_primaries_; 
-  uint32_t current_shard_primary_idx_ = 0; 
+
+  size_t current_shard_primary_idx_ = 0; 
 };
 
 }  // namespace resdb
