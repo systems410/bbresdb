@@ -29,7 +29,6 @@
 namespace resdb {
 namespace paxos {
 
-
 enum TransactionStatue {
   None = 0,
   Prepare = -999,

@@ -141,7 +141,7 @@ bool MessageManager::MayConsensusChangeStatus(
       // TODO: Option A: different states for acceptor and proposer. This is cleaner but more refactoring
       //       Option B: Can transition to accept state from any state? this sounds easier
     case Request::TYPE_PAXOS_PROMISE:
-      if (*status == TransactionStatue::READY_PROMISE &&
+      if (*status == TransactionStatue::NEW_PROMISE &&
           config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::READY_PREPARE;
         return status->compare_exchange_strong(
