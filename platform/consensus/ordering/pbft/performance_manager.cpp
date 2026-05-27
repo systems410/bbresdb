@@ -344,6 +344,7 @@ int PerformanceManager::DoBatch(
 
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
+  new_request->set_seq(seq_++);
 
   uint32_t next_primary = GetNextPrimary(); 
   replica_communicator_->SendMessage(*new_request, next_primary);
