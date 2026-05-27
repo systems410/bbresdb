@@ -143,13 +143,13 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessPromiseMsg(std::move(context),
                                             std::move(request));
-    case Request::TYPE_PAXOS_ACCEPT:
+    case Request::TYPE_PAXOS_ACCEPT_REQUEST:
       LOG(ERROR) << "[Paxos] Received accept from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
-      return commitment_->ProcessAcceptMsg(std::move(context),
-                                            std::move(request));
+      return commitment_->ProcessAcceptRequestMsg(std::move(context),
+                                                  std::move(request));
 
-    case Request::TYPE_PAXOS_LEARN:
+    case Request::TYPE_PAXOS_ACCEPT:
       LOG(ERROR) << "[Paxos] Received learn from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessCommitMsg(std::move(context),

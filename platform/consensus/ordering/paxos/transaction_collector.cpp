@@ -30,7 +30,9 @@ uint64_t TransactionCollector::Seq() { return seq_; }
 
 bool TransactionCollector::IsPrepared() { return is_prepared_; }
 
-TransactionStatue TransactionCollector::GetStatus() const { return status_; }
+TransactionStatue TransactionCollector::GetProposerStatus() const { return proposer_status_; }
+TransactionStatue TransactionCollector::GetAcceptorStatus() const { return acceptor_status_; }
+TransactionStatue TransactionCollector::GetLearnerStatus() const { return learner_status_ ; }
 
 int TransactionCollector::SetContextList(
     uint64_t seq, std::vector<std::unique_ptr<Context>> context) {
@@ -71,7 +73,7 @@ int TransactionCollector::AddRequest(
     std::unique_ptr<Request> request, const SignatureInfo& signature,
     bool is_main_request,
     std::function<void(const Request&, int received_count, CollectorDataType*,
-                       std::atomic<TransactionStatue>* status, bool has_promised_higher)>
+                       PaxosStatus& status, bool has_promised_higher)>
         call_back) {
   if (request == nullptr) {
     LOG(ERROR) << "request empty";
@@ -85,7 +87,7 @@ int TransactionCollector::AddRequest(
   if (is_committed_) {
     return -2;
   }
-  if (status_.load() == EXECUTED) {
+  if (learner_status_.load() == EXECUTED) {
     return -2;
   }
 
@@ -94,6 +96,12 @@ int TransactionCollector::AddRequest(
                << " collect seq:" << seq_;
     return -2;
   }
+
+  PaxosStatus status = {
+    .learner = &learner_status_, 
+    .acceptor = &acceptor_status_, 
+    .proposer = &proposer_status_
+  };
 
   bool promised_higher = false; 
   if (request->paxos_id() == highest_promise_id_) { 
@@ -109,6 +117,16 @@ int TransactionCollector::AddRequest(
 
   if (request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST && !promised_higher) { 
     has_accepted_ = true; 
+  }
+
+  // We need to update the main request if the promiser accepted a higher id 
+  // and this is the highest accepted id we have seen 
+  if (request->type() == Request::TYPE_PAXOS_PROMISE && request->has_accepted_paxos_id()) { 
+    if (request->accepted_paxos_id() == highest_accepted_id_) { 
+      is_main_request = request->sender_id() < highest_accepted_node_id_;  
+    } else { 
+      is_main_request = request->paxos_id() < highest_accepted_id_; 
+    }
   }
 
   if (is_main_request) {
@@ -127,7 +145,7 @@ int TransactionCollector::AddRequest(
       LOG(ERROR) << "set main request data fail";
       return -2;
     }
-    call_back(*main_request->request.get(), 1, nullptr, &status_, promised_higher);
+    call_back(*main_request->request.get(), 1, nullptr, status, promised_higher);
     return 0;
   } else {
     if (request->type() == Request::TYPE_COMMIT) {
@@ -143,11 +161,8 @@ int TransactionCollector::AddRequest(
       std::lock_guard<std::mutex> lk(mutex_);
       uint32_t count = 1; 
       if (request->type() == Request::TYPE_PAXOS_PROMISE) { 
-        // If the node has not accepted before, we know they are promising for this id 
-        if (!request->has_accepted_node_id()) { 
-          num_of_promises_[request->paxos_id()]++; 
-          count = num_of_promises_[request->paxos_id()];
-        }
+        num_of_promises_[request->paxos_id()]++; 
+        count = num_of_promises_[request->paxos_id()];
       } else { 
         if (senders_[type].count(hash) == 0) {
           senders_[type].insert(std::make_pair(hash, std::bitset<128>()));
@@ -155,10 +170,10 @@ int TransactionCollector::AddRequest(
         senders_[type][hash][sender_id] = 1;
         count = senders_[type][hash].count(); 
       }
-      call_back(*request, count, nullptr, &status_, promised_higher);
+      call_back(*request, count, nullptr, status, promised_higher);
     }
 
-    if (status_.load() == TransactionStatue::READY_EXECUTE) {
+    if (learner_status_.load() == TransactionStatue::READY_EXECUTE) {
       Commit();
       return 1;
     }
@@ -168,7 +183,7 @@ int TransactionCollector::AddRequest(
 
 int TransactionCollector::Commit() {
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
-  bool res = status_.compare_exchange_strong(
+  bool res = learner_status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
       std::memory_order_acq_rel);
   if (!res) {

@@ -111,11 +111,13 @@ class MessageManager {
 
   LockFreeCollectorPool* GetCollectorPool();
 
+  std::unique_ptr<Request>& GetPromisedRequest(uint64_t seq);
+
  private:
   bool IsValidMsg(const Request& request);
 
   bool MayConsensusChangeStatus(int type, int received_count,
-                                std::atomic<TransactionStatue>* status,
+                                TransactionCollector::PaxosStatus& status,
                                 bool promised_higher);
 
  private:

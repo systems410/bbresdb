@@ -121,39 +121,52 @@ bool MessageManager::IsValidMsg(const Request& request) {
   return true;
 }
 
+std::unique_ptr<Request>& MessageManager::GetPromisedRequest(uint64_t seq) { 
+  return collector_pool_->GetCollector(seq)->GetMainRequest(); 
+}
+
 bool MessageManager::MayConsensusChangeStatus(
-    int type, int received_count, std::atomic<TransactionStatue>* status,
+    int type, int received_count, TransactionCollector::PaxosStatus& status,
     bool has_promised_higher) {
   switch (type) {
+    // Received by the acceptor 
     case Request::TYPE_PAXOS_PREPARE:
-      if ((*status == TransactionStatue::None)) {
+      if ((*status.acceptor == TransactionStatue::None)) {
         TransactionStatue old_status = TransactionStatue::None;
-        return status->compare_exchange_strong(
-            old_status, TransactionStatue::NEW_PROMISE,
+        return status.acceptor->compare_exchange_strong(
+            old_status, TransactionStatue::PROMISED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
-      } else if (*status == TransactionStatue::NEW_PROMISE && !has_promised_higher) { 
-        TransactionStatue old_status = TransactionStatue::NEW_PROMISE;
-        return status->compare_exchange_strong(
-            old_status, TransactionStatue::NEW_PROMISE,
+      } else if (*status.acceptor == TransactionStatue::PROMISED && !has_promised_higher) { 
+        TransactionStatue old_status = TransactionStatue::PROMISED;
+        return status.acceptor->compare_exchange_strong(
+            old_status, TransactionStatue::PROMISED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }
       break;
-      // TODO: Option A: different states for acceptor and proposer. This is cleaner but more refactoring
-      //       Option B: Can transition to accept state from any state? this sounds easier
+    // Received by the proposer 
     case Request::TYPE_PAXOS_PROMISE:
-      if (*status == TransactionStatue::NEW_PROMISE &&
+      if (*status.proposer == TransactionStatue::None &&
           config_.GetMinDataReceiveNum() <= received_count) {
-        TransactionStatue old_status = TransactionStatue::READY_PREPARE;
-        return status->compare_exchange_strong(
-            old_status, TransactionStatue::READY_COMMIT,
+        TransactionStatue old_status = TransactionStatue::None;
+        return status.proposer->compare_exchange_strong(
+            old_status, TransactionStatue::PROMISES_RECEIVED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }
       break;
-    case Request::TYPE_COMMIT:
-      if (*status == TransactionStatue::READY_COMMIT &&
-          config_.GetMinDataReceiveNum() <= received_count) {
-        TransactionStatue old_status = TransactionStatue::READY_COMMIT;
-        return status->compare_exchange_strong(
+    // Received by the acceptor 
+    case Request::TYPE_PAXOS_ACCEPT_REQUEST:
+      if (*status.acceptor == TransactionStatue::PROMISED && !has_promised_higher) {
+        TransactionStatue old_status = TransactionStatue::PROMISED;
+        return status.acceptor->compare_exchange_strong(
+            old_status, TransactionStatue::ACCEPTED,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+      }
+      break;
+    // Received by the learner 
+    case Request::TYPE_PAXOS_ACCEPT: 
+      if (*status.learner == TransactionStatue::None) {
+        TransactionStatue old_status = TransactionStatue::None;
+        return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::READY_EXECUTE,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }
@@ -179,12 +192,13 @@ CollectorResultCode MessageManager::AddConsensusMsg(
   uint64_t seq = request->seq();
   int resp_received_count = 0;
   int proxy_id = request->proxy_id();
-
+  // Main request only updated if nothing else has been accepted 
+  bool has_accepted = collector_pool_->GetCollector(seq)->HasAccepted(); 
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
-      std::move(request), signature, type == Request::TYPE_PAXOS_ACCEPT_REQUEST,
+      std::move(request), signature, type == Request::TYPE_PAXOS_PREPARE && !has_accepted,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
-          std::atomic<TransactionStatue>* status, bool promised_higher) {
+          TransactionCollector::PaxosStatus& status, bool promised_higher) {
         if (MayConsensusChangeStatus(type, received_count, status, promised_higher)) {
           resp_received_count = 1;
         }
@@ -196,8 +210,6 @@ CollectorResultCode MessageManager::AddConsensusMsg(
     return CollectorResultCode::INVALID;
   }
   if (resp_received_count > 0) {
-    if (type == Request::TYPE_COMMIT) {
-    }
     return CollectorResultCode::STATE_CHANGED;
   }
   return CollectorResultCode::OK;
