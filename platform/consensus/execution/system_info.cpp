@@ -42,13 +42,16 @@ SystemInfo::SystemInfo(const ResDBConfig& config)
   LOG(ERROR) << "get primary id:" << primary_id_;
 }
 
-void SystemInfo::SetCrossShardPrimaryId(uint32_t id) { 
-  cross_shard_primary_id_ = id; 
+void SystemInfo::SetCrossShardPrimaryId(uint32_t id, uint64_t seq) { 
+  std::lock_guard<std::mutex> lock(cross_shard_primaries_mut_);
+  cross_shard_primaries_[seq] = id; 
 }
 
-uint32_t SystemInfo::GetCrossShardPrimaryId() const { 
-  return cross_shard_primary_id_;
+uint32_t SystemInfo::GetCrossShardPrimaryId(uint64_t seq) { 
+  std::lock_guard<std::mutex> lock(cross_shard_primaries_mut_);
+  return cross_shard_primaries_[seq];
 }
+
 
 uint32_t SystemInfo::GetPrimaryIdOfShard(uint32_t shard_id) {
   std::lock_guard<std::mutex> lock(shard_primary_ids_mut_);

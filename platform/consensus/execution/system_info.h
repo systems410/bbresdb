@@ -46,8 +46,8 @@ class SystemInfo {
   void SetPrimary(uint32_t id);
   void SetPrimaryOfShard(uint32_t shard_id, uint32_t id);
 
-  void SetCrossShardPrimaryId(uint32_t id);
-  uint32_t GetCrossShardPrimaryId() const;
+  void SetCrossShardPrimaryId(uint32_t id, uint64_t seq);
+  uint32_t GetCrossShardPrimaryId(uint64_t seq);
 
   uint64_t GetCurrentView() const;
   void SetCurrentView(uint64_t);
@@ -64,7 +64,9 @@ class SystemInfo {
   std::atomic<uint32_t> primary_id_;
   std::atomic<uint64_t> view_;
 
-  std::atomic<uint32_t> cross_shard_primary_id_; 
+  // maps seq -> cross shard primary 
+  std::unordered_map<uint64_t, uint32_t> cross_shard_primaries_; 
+  std::mutex cross_shard_primaries_mut_; 
 
 };
 }  // namespace resdb

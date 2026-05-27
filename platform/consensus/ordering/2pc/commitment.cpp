@@ -46,7 +46,7 @@ Commitment::Commitment(const ResDBConfig& config,
       config_.GetSelfInfo().id(), config_.GetSelfInfo().ip(),
       config_.GetSelfInfo().port(), config_.GetConfigData().enable_resview(),
       config_.GetConfigData().enable_faulty_switch());
-  global_stats_->SetPrimaryId(message_manager_->GetCurrentPrimary());
+  global_stats_->SetPrimaryId(1);
 }
 
 Commitment::~Commitment() {}
@@ -73,30 +73,10 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2;
   }
 
-  auto seq = message_manager_->AssignNextSeq();
-
-  // Artificially make the primary stop proposing new trasactions.
-
-  if (!seq.ok()) {
-    LOG(ERROR) << " seq fail";
-    duplicate_manager_->EraseProposed(user_request->hash());
-    global_stats_->SeqFail();
-    Request request;
-    request.set_type(Request::TYPE_RESPONSE);
-    request.set_sender_id(config_.GetSelfInfo().id());
-    request.set_sender_shard_id(config_.GetSelfShard());
-    request.set_proxy_id(user_request->proxy_id());
-    request.set_ret(-2);
-    request.set_hash(user_request->hash());
-
-    replica_communicator_->SendMessage(request, request.proxy_id());
-    return -2;
-  }
 
   global_stats_->RecordStateTime("request");
   auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id(), user_request->sender_shard_id());
   req_cpy->set_current_view(message_manager_->GetCurrentView());
-  req_cpy->set_seq(*seq);
 
   CollectorResultCode ret = message_manager_->AddConsensusMsg(std::move(context), std::move(req_cpy));
   if (ret == CollectorResultCode::INVALID) { 
@@ -105,7 +85,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
 
   user_request->set_type(Request::TYPE_2PC_PREPARE);
   user_request->set_current_view(message_manager_->GetCurrentView());
-  user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_sender_shard_id(config_.GetSelfShard()); 
   user_request->set_primary_id(config_.GetSelfInfo().id());
@@ -199,8 +178,6 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     global_stats_->RecordStateTime("commit");
     LOG(ERROR) << "[2PC] Sending commit ack message to " << sender;
     replica_communicator_->SendMessage(*ack, sender);
-    // Because leaders change, we must keep up on the current sequence 
-    message_manager_->IncrementSequence();
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }

@@ -44,8 +44,8 @@ std::unique_ptr<BatchUserResponse> MessageManager::GetResponseMsg() {
   return queue_.Pop();
 }
 
-int64_t MessageManager::GetCurrentPrimary() const {
-  return system_info_->GetCrossShardPrimaryId();
+int64_t MessageManager::GetCurrentPrimary(uint64_t seq) {
+  return system_info_->GetCrossShardPrimaryId(seq);
 }
 
 uint64_t MessageManager ::GetCurrentView() const {
@@ -94,12 +94,12 @@ bool MessageManager::IsValidMsg(const Request& request) {
 
 bool MessageManager::MayConsensusChangeStatus(
     int type, int received_count, std::atomic<TransactionStatue>* status,
-    bool ret) {
+    bool ret, uint64_t seq) {
   switch (type) {
     // Have the participant switch directly to ready commit on the prepare msg as we assume no aborts 
     case Request::TYPE_2PC_PREPARE: 
       // the coordinator may also be a participant, so dont let them switch to ready commit until they have enough votes
-      if (config_.GetSelfInfo().id() != GetCurrentPrimary() && *status == TransactionStatue::None) { 
+      if (config_.GetSelfInfo().id() != GetCurrentPrimary(seq) && *status == TransactionStatue::None) { 
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::READY_COMMIT,
@@ -163,7 +163,7 @@ CollectorResultCode MessageManager::AddConsensusMsg(
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           std::atomic<TransactionStatue>* status, bool force) {
-        if (MayConsensusChangeStatus(type, received_count, status, force)) {
+        if (MayConsensusChangeStatus(type, received_count, status, force, seq)) {
           resp_received_count = 1;
         }
       }, replica_cm_);
@@ -215,7 +215,7 @@ void MessageManager::SendResponse(std::unique_ptr<Request> request) {
   response->set_proxy_id(request->proxy_id());
   response->set_seq(request->seq());
   response->set_current_view(GetCurrentView());
-  response->set_primary_id(GetCurrentPrimary());
+  response->set_primary_id(GetCurrentPrimary(request->seq()));
 }
 
 LockFreeCollectorPool* MessageManager::GetCollectorPool() {

@@ -110,6 +110,8 @@ private:
 
   std::vector<uint32_t> shard_primaries_; 
 
+  uint64_t seq_ = 1; 
+
   size_t current_shard_primary_idx_ = 0; 
 };
 

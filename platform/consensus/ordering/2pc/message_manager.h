@@ -50,7 +50,7 @@ class MessageManager {
   void IncrementSequence(); 
   absl::StatusOr<uint64_t> AssignNextSeq();
 
-  int64_t GetCurrentPrimary() const;
+  int64_t GetCurrentPrimary(uint64_t seq);
   void SetNextSeq(uint64_t seq);
   int64_t GetNextSeq();
 
@@ -103,7 +103,7 @@ class MessageManager {
 
   bool MayConsensusChangeStatus(int type, int received_count,
                                 std::atomic<TransactionStatue>* status,
-                                bool force);
+                                bool force, uint64_t seq);
 
  private:
   ResDBConfig config_;
