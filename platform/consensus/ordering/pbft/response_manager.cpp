@@ -73,9 +73,11 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
   global_stats_ = Stats::GetGlobalStats();
   send_num_ = 0;
 
-  for (auto id : config_.GetShardIds()) { 
+  const std::set<uint32_t>& shards = config_.GetShardIds(); 
+  for (uint32_t id : shards) { 
     shard_primaries_.push_back(id);
   }
+  current_shard_primary_idx_ = shard_primaries_[0];
 }
 
 ResponseManager::~ResponseManager() {
