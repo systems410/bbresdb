@@ -347,6 +347,7 @@ int PerformanceManager::DoBatch(
   new_request->set_seq(seq_++);
 
   uint32_t next_primary = GetNextPrimary(); 
+  LOG(ERROR) << "[PROXY] Sending new txns to " << next_primary << " with seq " << new_request->seq(); 
   replica_communicator_->SendMessage(*new_request, next_primary);
   global_stats_->BroadCastMsg();
   send_num_[next_primary]++;
