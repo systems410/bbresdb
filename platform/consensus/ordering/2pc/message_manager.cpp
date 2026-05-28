@@ -166,7 +166,7 @@ CollectorResultCode MessageManager::AddConsensusMsg(
         if (MayConsensusChangeStatus(type, received_count, status, force, seq)) {
           resp_received_count = 1;
         }
-      }, replica_cm_);
+      }, replica_cm_, [this, seq] { collector_pool_->Update(seq - 1); });
   if (ret == 1) {
     SetLastCommittedTime(proxy_id);
   } else if (ret != 0) {

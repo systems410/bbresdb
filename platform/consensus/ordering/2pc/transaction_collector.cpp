@@ -73,7 +73,9 @@ int TransactionCollector::AddRequest(
     std::function<void(const Request&, int received_count, CollectorDataType*,
                        std::atomic<TransactionStatue>* status, bool force)>
         call_back,
-     ConsensusManager* replica_cm) {
+     ConsensusManager* replica_cm,
+     std::function<void()> post_commit_func
+    ) {
   LOG(ERROR) << "[FUCK2] Made it here 1"; 
   if (request == nullptr) {
     return -2;
@@ -85,13 +87,13 @@ int TransactionCollector::AddRequest(
   int type = request->type();
   uint64_t seq = request->seq();
 
-  // if (is_committed_) {
-  //   return -2;
-  // }
-  // LOG(ERROR) << "[FUCK2] Made it here 3"; 
-  // if (status_.load() == EXECUTED) {
-  //   return -2;
-  // }
+  if (is_committed_) {
+    return -2;
+  }
+  LOG(ERROR) << "[FUCK2] Made it here 3"; 
+  if (status_.load() == EXECUTED) {
+    return -2;
+  }
 
   LOG(ERROR) << "[FUCK2] Made it here 4"; 
   if (seq_ != static_cast<uint64_t>(request->seq())) {
@@ -155,6 +157,7 @@ int TransactionCollector::AddRequest(
     LOG(ERROR) << "[FUCK2] Made it here 10"; 
   if (status_.load() == TransactionStatue::READY_EXECUTE) {
     Commit(replica_cm);
+    post_commit_func(); 
     return 1;
   }
   LOG(ERROR) << "[FUCK2] Made it here 11"; 
