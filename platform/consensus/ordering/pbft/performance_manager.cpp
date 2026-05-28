@@ -274,6 +274,7 @@ int PerformanceManager::BatchProposeMsg() {
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
     if (send_num_ >= config_.GetMaxProcessTxn()) {
+      LOG(ERROR) << "[PROXY] Send num at maximum, sleeping..."; 
 
       usleep(100000);
       continue;
