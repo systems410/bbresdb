@@ -88,7 +88,7 @@ ResDBConfig::ResDBConfig(const ResConfigData& config_data,
     config_data_.set_tcp_batch_num(100);
   }
   if (config_data_.max_process_txn() == 0) {
-    config_data_.set_max_process_txn(64);
+    config_data_.set_max_process_txn(2048);
   }
   InitShards(all_replicas_);
 }
