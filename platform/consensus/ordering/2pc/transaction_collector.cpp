@@ -84,13 +84,14 @@ int TransactionCollector::AddRequest(
   std::string hash = request->hash();
   int type = request->type();
   uint64_t seq = request->seq();
-  if (is_committed_) {
-    return -2;
-  }
-  LOG(ERROR) << "[FUCK2] Made it here 3"; 
-  if (status_.load() == EXECUTED) {
-    return -2;
-  }
+
+  // if (is_committed_) {
+  //   return -2;
+  // }
+  // LOG(ERROR) << "[FUCK2] Made it here 3"; 
+  // if (status_.load() == EXECUTED) {
+  //   return -2;
+  // }
 
   LOG(ERROR) << "[FUCK2] Made it here 4"; 
   if (seq_ != static_cast<uint64_t>(request->seq())) {
@@ -162,6 +163,7 @@ int TransactionCollector::AddRequest(
 
 int TransactionCollector::Commit(ConsensusManager* replica_cm) {  
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
+  LOG(ERROR) << "COMMITING SEQ " << seq_ ; 
   bool res = status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
       std::memory_order_acq_rel);
