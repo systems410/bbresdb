@@ -96,10 +96,10 @@ class ShardedConsensusManager2PC : public ConsensusManager {
     switch (request->type()) {
 
       case Request::TYPE_NEW_TXNS: {
+        system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id(), request->seq());
       LOG(ERROR) << "[2PC] Received new txns from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
                  << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
-        system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id(), request->seq());
         int ret = commitment_->ProcessNewRequest(std::move(context),
                                                  std::move(request));
         if (ret == -3) {
