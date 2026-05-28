@@ -175,11 +175,13 @@ bool MessageManager::MayConsensusChangeStatus(
 // message, return 1, otherwise return 0. Return -2 if the request is not valid.
 CollectorResultCode MessageManager::AddConsensusMsg(
     const SignatureInfo& signature, std::unique_ptr<Request> request) {
+  LOG(ERROR) << "[FUCK2] Made it here 1";
   if (request == nullptr || !IsValidMsg(*request)) {
     LOG(ERROR) << " msg not invalid";
     return CollectorResultCode::INVALID;
   }
 
+  LOG(ERROR) << "[FUCK2] Made it here 2";
   int type = request->type();
   uint64_t seq = request->seq();
   int resp_received_count = 0;
@@ -189,6 +191,7 @@ CollectorResultCode MessageManager::AddConsensusMsg(
     return CollectorResultCode::STATE_CHANGED;
   }
 
+  LOG(ERROR) << "[FUCK2] Made it here 3";
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
       std::move(request), signature, type == Request::TYPE_PRE_PREPARE,
       [&](const Request& request, int received_count,
@@ -204,14 +207,17 @@ CollectorResultCode MessageManager::AddConsensusMsg(
     LOG(ERROR) << " add request fail";
     return CollectorResultCode::INVALID;
   }
+  LOG(ERROR) << "[FUCK2] Made it here 4";
   if (resp_received_count > 0) {
     if (type == Request::TYPE_COMMIT) {
       if (checkpoint_manager_) {
         checkpoint_manager_->AddCommitState(seq);
       }
     }
+    LOG(ERROR) << "[FUCK2] Made it here 5";
     return CollectorResultCode::STATE_CHANGED;
   }
+  LOG(ERROR) << "[FUCK2] Made it here 6";
   return CollectorResultCode::OK;
 }
 
