@@ -25,8 +25,10 @@ def read_tps(file):
             s = l.split()
             for r in s:
                 if(r.split(':')[0] == 'txn'):
+                    print("Using txn line " + l)
                     tps.append(int(r.split(':')[1]))
             if l.find("client latency") > 0:
+                print("Using cli lat line " + l)
                 lat.append(float(s[-1].split(':')[-1]))
     return tps, lat
 
