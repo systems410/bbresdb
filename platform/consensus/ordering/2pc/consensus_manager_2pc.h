@@ -119,10 +119,10 @@ class ShardedConsensusManager2PC : public ConsensusManager {
 
       // Received by all participants. This is where they will respond with their vote 
       case Request::TYPE_2PC_PREPARE:
+        system_info_->SetCrossShardPrimaryId(request->sender_id(), request->seq());
         LOG(ERROR) << "[2PC] Received prepare from " 
                    << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
                    << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
-        system_info_->SetCrossShardPrimaryId(request->sender_id(), request->seq());
         return commitment_->ProcessPrepareMsg(std::move(context),
                                               std::move(request));
 
