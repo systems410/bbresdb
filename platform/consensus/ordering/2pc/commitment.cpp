@@ -67,7 +67,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2;
   }
 
-
   global_stats_->IncClientRequest();
   if (duplicate_manager_->CheckAndAddProposed(user_request->hash())) {
     return -2;
