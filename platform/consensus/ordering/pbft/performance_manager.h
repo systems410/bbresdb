@@ -96,7 +96,7 @@ class PerformanceManager {
   std::atomic<bool> stop_;
   uint64_t local_id_ = 0;
   Stats* global_stats_;
-  std::vector<int> send_num_;
+  std::atomic<int> send_num_ = 0; 
   std::mutex mutex_;
   std::atomic<int> total_num_;
   SystemInfo* system_info_;

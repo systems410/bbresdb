@@ -72,10 +72,6 @@ PerformanceManager::PerformanceManager(
   checking_timeout_thread_ =
       std::thread(&PerformanceManager::MonitoringClientTimeOut, this);
   global_stats_ = Stats::GetGlobalStats();
-  send_num_.push_back(0);
-  for (size_t i = 0; i <= system_info_->GetAllShardPrimaryIds().size(); i++) {
-    send_num_.push_back(0);
-  }
   total_num_ = 0;
   timeout_length_ = 100000000;  // 10s
 
@@ -258,9 +254,8 @@ void PerformanceManager::SendResponseToClient(
   }
   {
     // std::lock_guard<std::mutex> lk(mutex_);
-    if (send_num_[0] > 0) {
-      send_num_[0]--;
-      LOG(ERROR) << "[PROXYDEC] Decrementing to " << send_num_[0]; 
+    if (send_num_ > 0) {
+      send_num_--;
     }
   }
 
@@ -278,9 +273,7 @@ int PerformanceManager::BatchProposeMsg() {
   eval_ready_future_.get();
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
-    LOG(ERROR) << "[PROXYSEND] Send num of " << GetPrimaryOfShard(current_shard_primary_idx_) 
-               << " is " << send_num_[0] << " max: " << config_.GetMaxProcessTxn();
-    if (send_num_[0] >= config_.GetMaxProcessTxn()) {
+    if (send_num_ >= config_.GetMaxProcessTxn()) {
 
       usleep(100000);
       continue;
@@ -351,10 +344,9 @@ int PerformanceManager::DoBatch(
   new_request->set_seq(seq_++);
 
   uint32_t next_primary = GetNextPrimary(); 
-  LOG(ERROR) << "[PROXY] Sending new txns to " << next_primary << " with seq " << new_request->seq(); 
   replica_communicator_->SendMessage(*new_request, next_primary);
   global_stats_->BroadCastMsg();
-  send_num_[0]++;
+  send_num_++;
   if (total_num_++ == 1000000) {
     stop_ = true;
     LOG(WARNING) << "total num is done:" << total_num_;
