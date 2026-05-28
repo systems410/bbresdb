@@ -276,6 +276,8 @@ int PerformanceManager::BatchProposeMsg() {
   eval_ready_future_.get();
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
+    LOG(ERROR) << "[PROXYSEND] Send num of " << GetPrimaryOfShard(current_shard_primary_idx_) 
+               << " is " << send_num_[GetPrimaryOfShard(current_shard_primary_idx_)] << " max: " << config_.GetMaxProcessTxn();
     if (send_num_[GetPrimaryOfShard(current_shard_primary_idx_)] >= config_.GetMaxProcessTxn()) {
 
       usleep(100000);
