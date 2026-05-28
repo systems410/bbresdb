@@ -260,6 +260,7 @@ void PerformanceManager::SendResponseToClient(
     // std::lock_guard<std::mutex> lk(mutex_);
     if (send_num_[0] > 0) {
       send_num_[0]--;
+      LOG(ERROR) << "[PROXYDEC] Decrementing to " << send_num_[0]; 
     }
   }
 
