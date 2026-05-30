@@ -183,7 +183,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   if (duplicate_manager_->CheckAndAddProposed(user_request->hash())) {
     return -2;
   }
-  auto seq = message_manager_->AssignNextSeq();
 
   // Artificially make the primary stop proposing new trasactions.
 
@@ -209,7 +208,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_current_view(message_manager_->GetCurrentView());
   user_request->set_type(Request::TYPE_PAXOS_PREPARE);
   user_request->set_sender_shard_id(config_.GetSelfShard());
-  user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
   user_request->set_paxos_id(1);
