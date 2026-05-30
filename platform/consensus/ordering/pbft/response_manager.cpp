@@ -77,6 +77,7 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
   for (uint32_t id : shards) { 
     shard_primaries_.push_back(id);
   }
+  current_shard_primary_idx_ = shard_primaries_[0];
 }
 
 ResponseManager::~ResponseManager() {
@@ -351,8 +352,10 @@ int ResponseManager::DoBatch(
   batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
+  new_request->set_seq(seq_++);
   uint32_t next_primary = GetNextPrimary(); 
-  replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(next_primary));
+  LOG(ERROR) << "[PROXY] Sending new txns to " << next_primary << " with seq " << new_request->seq(); 
+  replica_communicator_->SendMessage(*new_request, next_primary);
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
             << " batch size:" << batch_req.size();
@@ -377,7 +380,7 @@ void ResponseManager::AddWaitingResponseRequest(
 
 uint32_t ResponseManager::GetNextPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
-  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) {
     current_shard_primary_idx_ = 0; 
   } 
   return id; 

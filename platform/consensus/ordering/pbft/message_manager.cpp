@@ -118,17 +118,17 @@ bool MessageManager::IsValidMsg(const Request& request) {
   if (request.type() == Request::TYPE_RESPONSE) {
     return true;
   }
-  // view should be the same as the current one.
-  if (static_cast<uint64_t>(request.current_view()) != GetCurrentView()) {
-    LOG(ERROR) << "message view :[" << request.current_view()
-               << "] is older than the cur view :[" << GetCurrentView() << "]";
-    return false;
-  }
+  // // view should be the same as the current one.
+  // if (static_cast<uint64_t>(request.current_view()) != GetCurrentView()) {
+  //   LOG(ERROR) << "message view :[" << request.current_view()
+  //              << "] is older than the cur view :[" << GetCurrentView() << "]";
+  //   return false;
+  // }
 
-  if (static_cast<uint64_t>(request.seq()) <
-      transaction_executor_->GetMaxPendingExecutedSeq()) {
-    return false;
-  }
+  // if (static_cast<uint64_t>(request.seq()) <
+  //     transaction_executor_->GetMaxPendingExecutedSeq()) {
+  //   return false;
+  // }
 
   return true;
 }

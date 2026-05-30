@@ -107,7 +107,9 @@ class TransactionCollector {
                          CollectorDataType* data,
                          std::atomic<TransactionStatue>* status, bool force)>
           call_back, 
-      ConsensusManager* replica_cm);
+      ConsensusManager* replica_cm, 
+      std::function<void()> post_commit_func=nullptr
+    );
 
   std::vector<RequestInfo> GetPreparedProof();
   TransactionStatue GetStatus() const;

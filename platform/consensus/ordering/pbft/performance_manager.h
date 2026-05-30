@@ -76,8 +76,9 @@ class PerformanceManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
-  uint32_t GetNextShardPrimary(); 
+  uint32_t GetNextPrimary(); 
   std::unique_ptr<Request> GenerateUserRequest();
+  uint32_t GetPrimaryOfShard(uint32_t shard_id); 
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
   void RemoveWaitingResponseRequest(std::string hash);
@@ -95,7 +96,7 @@ class PerformanceManager {
   std::atomic<bool> stop_;
   uint64_t local_id_ = 0;
   Stats* global_stats_;
-  std::vector<int> send_num_;
+  std::atomic<int> send_num_ = 0; 
   std::mutex mutex_;
   std::atomic<int> total_num_;
   SystemInfo* system_info_;
@@ -115,6 +116,7 @@ class PerformanceManager {
   sem_t request_sent_signal_;
   uint64_t highest_seq_;
   uint64_t highest_seq_primary_id_;
+  uint64_t seq_ = 1;
 
   std::vector<uint32_t> shard_primaries_; 
   uint32_t current_shard_primary_idx_ = 0; 

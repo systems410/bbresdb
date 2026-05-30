@@ -372,7 +372,6 @@ void ReplicaCommunicator::SendMessage(const google::protobuf::Message& message,
     return;
   }
 
-  std::cout << "[RC] Sending message to target replica: " << target_replica.id() << std::endl;
   int ret = SendMessage(message, target_replica);
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";

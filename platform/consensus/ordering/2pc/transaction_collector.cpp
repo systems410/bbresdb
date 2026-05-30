@@ -73,7 +73,9 @@ int TransactionCollector::AddRequest(
     std::function<void(const Request&, int received_count, CollectorDataType*,
                        std::atomic<TransactionStatue>* status, bool force)>
         call_back,
-     ConsensusManager* replica_cm) {
+     ConsensusManager* replica_cm,
+     std::function<void()> post_commit_func
+    ) {
   if (request == nullptr) {
     return -2;
   }
@@ -82,6 +84,7 @@ int TransactionCollector::AddRequest(
   std::string hash = request->hash();
   int type = request->type();
   uint64_t seq = request->seq();
+
   if (is_committed_) {
     return -2;
   }
@@ -144,6 +147,7 @@ int TransactionCollector::AddRequest(
 
   if (status_.load() == TransactionStatue::READY_EXECUTE) {
     Commit(replica_cm);
+    post_commit_func(); 
     return 1;
   }
   return 0;
@@ -151,6 +155,7 @@ int TransactionCollector::AddRequest(
 
 int TransactionCollector::Commit(ConsensusManager* replica_cm) {  
   TransactionStatue old_status = TransactionStatue::READY_EXECUTE;
+  LOG(ERROR) << "COMMITING SEQ " << seq_ ; 
   bool res = status_.compare_exchange_strong(
       old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
       std::memory_order_acq_rel);

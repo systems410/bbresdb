@@ -114,33 +114,12 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   if (duplicate_manager_->CheckAndAddProposed(user_request->hash())) {
     return -2;
   }
-  auto seq = message_manager_->AssignNextSeq();
-
-  // Artificially make the primary stop proposing new trasactions.
-
-  if (!seq.ok()) {
-    LOG(ERROR) << " seq fail";
-    duplicate_manager_->EraseProposed(user_request->hash());
-    global_stats_->SeqFail();
-    Request request;
-    request.set_type(Request::TYPE_RESPONSE);
-    request.set_sender_id(config_.GetSelfInfo().id());
-    request.set_sender_shard_id(config_.GetSelfShard());
-    request.set_proxy_id(user_request->proxy_id());
-    request.set_ret(-2);
-    request.set_hash(user_request->hash());
-
-    replica_communicator_->SendMessage(request, request.proxy_id());
-    return -2;
-  }
-
 
   global_stats_->RecordStateTime("request");
 
   user_request->set_current_view(message_manager_->GetCurrentView());
   user_request->set_type(Request::TYPE_PRE_PREPARE);
   user_request->set_sender_shard_id(config_.GetSelfShard());
-  user_request->set_seq(*seq);
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
 

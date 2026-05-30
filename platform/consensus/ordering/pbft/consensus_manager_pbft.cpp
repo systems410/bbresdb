@@ -218,7 +218,7 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
                                                std::move(request));
     case Request::TYPE_RESPONSE:
       LOG(ERROR) << "[PBFT] Received response from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -227,7 +227,8 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
       LOG(ERROR) << "[PBFT] Received new txns from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                 << " primary: " << GetPrimary(); 
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -251,17 +252,20 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
     }
     case Request::TYPE_PRE_PREPARE:
       LOG(ERROR) << "[PBFT] Received pre-prepare from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                 << " primary: " << GetPrimary(); 
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
       LOG(ERROR) << "[PBFT] Received prepare from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                 << " primary: " << GetPrimary(); 
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
       LOG(ERROR) << "[PBFT] Received commit from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                 << " primary: " << GetPrimary(); 
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:
