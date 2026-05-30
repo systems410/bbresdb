@@ -76,12 +76,10 @@ int TransactionCollector::AddRequest(
      ConsensusManager* replica_cm,
      std::function<void()> post_commit_func
     ) {
-  LOG(ERROR) << "[FUCK2] Made it here 1"; 
   if (request == nullptr) {
     return -2;
   }
 
-  LOG(ERROR) << "[FUCK2] Made it here 2"; 
   int32_t sender_id = request->sender_id();
   std::string hash = request->hash();
   int type = request->type();
@@ -90,33 +88,28 @@ int TransactionCollector::AddRequest(
   if (is_committed_) {
     return -2;
   }
-  LOG(ERROR) << "[FUCK2] Made it here 3"; 
   if (status_.load() == EXECUTED) {
     return -2;
   }
 
-  LOG(ERROR) << "[FUCK2] Made it here 4"; 
   if (seq_ != static_cast<uint64_t>(request->seq())) {
     LOG(ERROR) << "data invalid, seq not the same:" << seq
                << " collect seq:" << seq_;
     return -2;
   }
 
-  LOG(ERROR) << "[FUCK2] Made it here 5"; 
   if (is_main_request) {
     auto request_info = std::make_unique<RequestInfo>();
     request_info->signature = context->signature;
     request_info->request = std::make_unique<Request>(*request);
     bool force = false;
     int ret = atomic_main_request_.Set(request_info);
-    LOG(ERROR) << "[FUCK2] Made it here 6"; 
     if (!ret) {
       other_main_request_.insert(std::move(request_info));
       LOG(ERROR) << "set main request fail: data existed:" << seq
                  << " ret:" << ret;
       return -2;
     }
-    LOG(ERROR) << "[FUCK2] Made it here 7"; 
     auto main_request = atomic_main_request_.Reference();
     if (main_request->request == nullptr) {
       LOG(ERROR) << "set main request data fail";
@@ -125,7 +118,6 @@ int TransactionCollector::AddRequest(
     auto context_info = std::make_unique<ContextInfo>(); 
     context_info->context = std::move(context);
     ret = atomic_main_context_.Set(context_info);
-    LOG(ERROR) << "[FUCK2] Made it here 8"; 
     if (!ret) {
       LOG(ERROR) << "set main context fail: data existed:" << seq
                  << " ret:" << ret;
@@ -134,7 +126,6 @@ int TransactionCollector::AddRequest(
   } 
 
 
-    LOG(ERROR) << "[FUCK2] Made it here 9"; 
   if (request->type() == Request::TYPE_COMMIT) {
     if (request->has_data_signature() &&
         request->data_signature().node_id() > 0) {
@@ -154,13 +145,11 @@ int TransactionCollector::AddRequest(
               false);
   }
 
-    LOG(ERROR) << "[FUCK2] Made it here 10"; 
   if (status_.load() == TransactionStatue::READY_EXECUTE) {
     Commit(replica_cm);
     post_commit_func(); 
     return 1;
   }
-  LOG(ERROR) << "[FUCK2] Made it here 11"; 
   return 0;
 }
 

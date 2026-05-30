@@ -54,13 +54,11 @@ Commitment::~Commitment() {}
 // Send a prepare request to each replica 
 int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
                                   std::unique_ptr<Request> user_request) {
-  LOG(ERROR) << "[FUCK] Made it here 1";
   if (context == nullptr || context->signature.signature().empty()) {
     LOG(ERROR) << "user request doesn't contain signature, reject";
     return -2;
   }
 
-  LOG(ERROR) << "[FUCK] Made it here 2";
   if (uint64_t seq =
           duplicate_manager_->CheckIfExecuted(user_request->hash())) {
     LOG(ERROR) << "This request is already executed with seq: " << seq;
@@ -69,26 +67,22 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2;
   }
 
-  LOG(ERROR) << "[FUCK] Made it here 3";
   global_stats_->IncClientRequest();
   if (duplicate_manager_->CheckAndAddProposed(user_request->hash())) {
     return -2;
   }
 
-  LOG(ERROR) << "[FUCK] Made it here 4";
 
   global_stats_->RecordStateTime("request");
   auto req_cpy = NewRequest(Request::TYPE_NEW_TXNS, *user_request, user_request->sender_id(), user_request->sender_shard_id());
   req_cpy->set_current_view(message_manager_->GetCurrentView());
 
-  LOG(ERROR) << "[FUCK] Made it here 5";
 
   CollectorResultCode ret = message_manager_->AddConsensusMsg(std::move(context), std::move(req_cpy));
   if (ret == CollectorResultCode::INVALID) { 
     return -2; 
   }
 
-  LOG(ERROR) << "[FUCK] Made it here 6";
 
   user_request->set_type(Request::TYPE_2PC_PREPARE);
   user_request->set_current_view(message_manager_->GetCurrentView());
