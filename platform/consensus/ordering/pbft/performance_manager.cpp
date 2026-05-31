@@ -63,7 +63,7 @@ PerformanceManager::PerformanceManager(
           .public_key()
           .public_key_info()
           .type() == CertificateKeyInfo::CLIENT) {
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 1; ++i) {
       user_req_thread_[i] =
           std::thread(&PerformanceManager::BatchProposeMsg, this);
     }
@@ -275,7 +275,6 @@ int PerformanceManager::BatchProposeMsg() {
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
     if (send_num_ >= config_.GetMaxProcessTxn()) {
-      LOG(ERROR) << "[PROXY] Send num at maximum, sleeping..."; 
 
       usleep(100000);
       continue;
