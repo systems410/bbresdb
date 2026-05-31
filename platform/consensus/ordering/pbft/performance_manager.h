@@ -116,7 +116,7 @@ class PerformanceManager {
   sem_t request_sent_signal_;
   uint64_t highest_seq_;
   uint64_t highest_seq_primary_id_;
-  uint64_t seq_ = 1;
+  std::atomic<uint64_t> seq_ = 1;
 
   std::vector<uint32_t> shard_primaries_; 
   uint32_t current_shard_primary_idx_ = 0; 
