@@ -111,7 +111,7 @@ class MessageManager {
 
   LockFreeCollectorPool* GetCollectorPool();
 
-  std::unique_ptr<Request>& GetPromisedRequest(uint64_t seq);
+  Request* GetPromisedRequest(uint64_t seq);
 
  private:
   bool IsValidMsg(const Request& request);

@@ -102,6 +102,7 @@ class TransactionCollector {
     std::atomic<TransactionStatue>* learner; 
     std::atomic<TransactionStatue>* acceptor; 
     std::atomic<TransactionStatue>* proposer; 
+    std::atomic<TransactionStatue>* proxy; 
   };
 
   // Add a message and count by its hash value.
@@ -120,7 +121,12 @@ class TransactionCollector {
   TransactionStatue GetAcceptorStatus() const; 
   TransactionStatue GetLearnerStatus() const; 
 
-  std::unique_ptr<Request>& GetMainRequest() { return atomic_main_request_.Reference()->request; }; 
+  Request* GetMainRequest() { 
+    if (atomic_main_request_.Reference() == nullptr) { 
+      return nullptr;
+    }
+    return atomic_main_request_.Reference()->request.get(); 
+  }; 
 
   bool HasAccepted() const { return has_accepted_; } 
 
@@ -148,6 +154,7 @@ class TransactionCollector {
   std::atomic<TransactionStatue> acceptor_status_ = TransactionStatue::None;
   std::atomic<TransactionStatue> proposer_status_ = TransactionStatue::None;
   std::atomic<TransactionStatue> learner_status_ = TransactionStatue::None;
+  std::atomic<TransactionStatue> proxy_status_ = TransactionStatue::None; 
   std::mutex mutex_;
   std::vector<SignatureInfo> commit_certs_;
   std::map<std::string, std::bitset<128>> senders_[Request::NUM_OF_TYPE];

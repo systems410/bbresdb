@@ -100,25 +100,33 @@ int TransactionCollector::AddRequest(
   PaxosStatus status = {
     .learner = &learner_status_, 
     .acceptor = &acceptor_status_, 
-    .proposer = &proposer_status_
+    .proposer = &proposer_status_,
+    .proxy = &proxy_status_ 
   };
 
   bool promised_higher = false; 
-  if (request->paxos_id() == highest_promise_id_) { 
-    promised_higher = request->sender_id() < highest_promise_node_id_;  
-  } else { 
-    promised_higher = request->paxos_id() < highest_promise_id_; 
-  }
+  LOG(ERROR) << "[PROXY] request paxos id: " << request->paxos_id() 
+             << " highest promise id: " << highest_promise_id_
+             << " highest promise node id: " << highest_promise_node_id_ 
+             << " seq : " << request->seq() << " type " << request->type(); 
 
-  if (!promised_higher) { 
-    highest_promise_id_ = request->paxos_id(); 
-    highest_promise_node_id_ = request->sender_id(); 
-  }
+  if (request->type() == Request::TYPE_PAXOS_PROMISE || 
+      request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST) { 
+    if (request->paxos_id() == highest_promise_id_) { 
+      promised_higher = request->sender_id() < highest_promise_node_id_;  
+    } else { 
+      promised_higher = request->paxos_id() < highest_promise_id_; 
+    }
 
-  if (request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST && !promised_higher) { 
-    has_accepted_ = true; 
-  }
+    if (!promised_higher) { 
+      highest_promise_id_ = request->paxos_id(); 
+      highest_promise_node_id_ = request->sender_id(); 
+    }
 
+    if (request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST && !promised_higher) { 
+      has_accepted_ = true; 
+    }
+  }
   // We need to update the main request if the promiser accepted a higher id 
   // and this is the highest accepted id we have seen 
   if (request->type() == Request::TYPE_PAXOS_PROMISE && request->has_accepted_paxos_id()) { 

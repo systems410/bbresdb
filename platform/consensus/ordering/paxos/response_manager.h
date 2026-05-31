@@ -111,6 +111,8 @@ private:
 
   std::vector<uint32_t> shard_primaries_; 
   uint32_t current_shard_primary_idx_; 
+
+  uint64_t seq_ = 1; 
 };
 } // namespace paxos 
 }  // namespace resdb

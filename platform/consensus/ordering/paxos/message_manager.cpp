@@ -121,7 +121,7 @@ bool MessageManager::IsValidMsg(const Request& request) {
   return true;
 }
 
-std::unique_ptr<Request>& MessageManager::GetPromisedRequest(uint64_t seq) { 
+Request* MessageManager::GetPromisedRequest(uint64_t seq) { 
   return collector_pool_->GetCollector(seq)->GetMainRequest(); 
 }
 
@@ -160,13 +160,17 @@ bool MessageManager::MayConsensusChangeStatus(
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::ACCEPTED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
+      } else { 
+        LOG(ERROR) << "[PAXOS] Recieved accept request, but could not transition. Promised higher: " << has_promised_higher;
       }
       break;
     // Received by the learner 
     case Request::TYPE_PAXOS_ACCEPT: 
-      if (*status.learner == TransactionStatue::None) {
+      LOG(ERROR) << "[PAXOS] Received accept, have " << received_count << " need " << config_.GetMinDataReceiveNum(); 
+      if (*status.learner == TransactionStatue::None 
+        && config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
-        return status.acceptor->compare_exchange_strong(
+        return status.learner->compare_exchange_strong(
             old_status, TransactionStatue::READY_EXECUTE,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       }

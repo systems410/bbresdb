@@ -93,18 +93,19 @@ int Commitment::ProcessPromiseMsg(std::unique_ptr<Context> context,
 
   auto ret = message_manager_->AddConsensusMsg(context->signature,
                                                std::move(request));
-
   // If the promised request has been updated because of this, that means the promiser 
   // has accepted a value of higher ID. Use this value instead. 
-  if (message_manager_->GetPromisedRequest(accept_request_req->seq()) != nullptr) { 
+
+  Request* promised_req = message_manager_->GetPromisedRequest(accept_request_req->seq());
+  if (promised_req != nullptr) { 
     accept_request_req = resdb::NewRequest(Request::TYPE_PAXOS_ACCEPT_REQUEST, 
-                                      *message_manager_->GetPromisedRequest(accept_request_req->seq()), 
+                                      *promised_req, 
                                       config_.GetSelfInfo().id(), 
                                       config_.GetSelfShard());
 
   }
-
   if (ret == CollectorResultCode::STATE_CHANGED) {
+    LOG(ERROR) << "[PAXOS] Sending accept request to shard";
     replica_communicator_->SendMessageToShard(*accept_request_req, config_.GetSelfShard());
   } 
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -131,10 +132,12 @@ int Commitment::ProcessAcceptRequestMsg(std::unique_ptr<Context> context,
   auto accept_req = NewRequest(Request::TYPE_PAXOS_ACCEPT, *request, 
                                config_.GetSelfInfo().id(), config_.GetSelfShard());
 
+  uint32_t sender = request->sender_id(); 
   auto ret = message_manager_->AddConsensusMsg(context->signature,
                                                std::move(request));
 
   if (ret == CollectorResultCode::STATE_CHANGED) { 
+    LOG(ERROR) << "[PAXOS] Sending accept to self shard"; 
     replica_communicator_->SendMessageToShard(*accept_req, config_.GetSelfShard());
   }
 
@@ -184,24 +187,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
     return -2;
   }
 
-  // Artificially make the primary stop proposing new trasactions.
-
-  if (!seq.ok()) {
-    LOG(ERROR) << " seq fail";
-    duplicate_manager_->EraseProposed(user_request->hash());
-    global_stats_->SeqFail();
-    Request request;
-    request.set_type(Request::TYPE_RESPONSE);
-    request.set_sender_id(config_.GetSelfInfo().id());
-    request.set_sender_shard_id(config_.GetSelfShard());
-    request.set_proxy_id(user_request->proxy_id());
-    request.set_ret(-2);
-    request.set_hash(user_request->hash());
-
-    replica_communicator_->SendMessage(request, request.proxy_id());
-    return -2;
-  }
-
 
   global_stats_->RecordStateTime("request");
 
@@ -211,6 +196,8 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_sender_id(config_.GetSelfInfo().id());
   user_request->set_primary_id(config_.GetSelfInfo().id());
   user_request->set_paxos_id(1);
+
+  LOG(ERROR) << "[PAXOS] Sending propose to self shard"; 
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
 }
@@ -310,6 +297,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
 
   }
 
+  uint32_t sender = request->sender_id();
 
   promise_request->mutable_data_signature()->Clear();
   CollectorResultCode ret =
@@ -329,7 +317,8 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     }
 
     global_stats_->RecordStateTime("prepare");
-    replica_communicator_->SendMessageToShard(*promise_request, config_.GetSelfShard());
+    LOG(ERROR) << "[PAXOS] Sending promise to " << sender; 
+    replica_communicator_->SendMessage(*promise_request, sender);
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }
@@ -353,6 +342,10 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
     return message_manager_->AddConsensusMsg(context->signature,
                                              std::move(request));
   }
+
+  auto req_cpy = NewRequest(Request::TYPE_PAXOS_ACCEPT, *request, 
+                            config_.GetSelfInfo().id(), config_.GetSelfShard());
+
   // global_stats_->IncCommit();
   // Add request to message_manager.
   // If it has received enough same requests(2f+1), message manager will
@@ -360,10 +353,14 @@ int Commitment::ProcessCommitMsg(std::unique_ptr<Context> context,
   CollectorResultCode ret =
       message_manager_->AddConsensusMsg(context->signature, std::move(request));
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    // LOG(ERROR)<<request->data().size();
-    // global_stats_->GetTransactionDetails(request->data());
+    LOG(ERROR) << "[PAXOS] Commit"; 
     global_stats_->RecordStateTime("commit");
-    // ACK the commit to the coordinator 
+
+    // Send accept to all learners 
+    if (message_manager_->GetCurrentPrimary() == config_.GetSelfInfo().id()) { 
+      replica_communicator_->SendMessageToShard(*req_cpy, config_.GetSelfShard());
+    }
+
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
 }

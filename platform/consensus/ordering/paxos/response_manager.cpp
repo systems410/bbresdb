@@ -210,8 +210,8 @@ CollectorResultCode ResponseManager::AddResponseMsg(
       std::move(request), signature, false,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
-          std::atomic<TransactionStatue>* status, bool force) {
-        if (MayConsensusChangeStatus(type, received_count, status, false)) {
+          TransactionCollector::PaxosStatus& status, bool _) {
+        if (MayConsensusChangeStatus(type, received_count, status.proxy)) {
           resp_received_count = 1;
           response_call_back(request, data);
         }
@@ -352,7 +352,9 @@ int ResponseManager::DoBatch(
   batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
+  new_request->set_seq(seq_++);
   uint32_t next_primary = GetNextPrimary(); 
+  LOG(ERROR) << "[PROXY] Sending new txn to shard " << next_primary << " with seq: " << new_request->seq(); 
   replica_communicator_->SendMessage(*new_request, GetPrimaryOfShard(next_primary));
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)

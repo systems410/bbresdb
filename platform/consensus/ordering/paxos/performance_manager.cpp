@@ -229,8 +229,8 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
       std::move(request), signature, false,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
-          std::atomic<TransactionStatue>* status, bool force) {
-        if (MayConsensusChangeStatus(type, received_count, status)) {
+          TransactionCollector::PaxosStatus& status, bool _) {
+        if (MayConsensusChangeStatus(type, received_count, status.proxy)) {
           resp_received_count = 1;
           response_call_back(request, data);
         }

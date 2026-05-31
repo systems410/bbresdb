@@ -105,7 +105,7 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      LOG(ERROR) << "[Paxos] Received client request from " 
+      LOG(ERROR) << "[PAXOS] Received client request from " 
                  << request->sender_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
@@ -113,7 +113,7 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
-      LOG(ERROR) << "[Paxos] Received response from " 
+      LOG(ERROR) << "[PAXOS] Received response from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
@@ -122,7 +122,7 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
-      LOG(ERROR) << "[Paxos] Received new txns from " 
+      LOG(ERROR) << "[PAXOS] Received new txns from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
@@ -134,23 +134,23 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PAXOS_PREPARE:
-      LOG(ERROR) << "[Paxos] Received prepare from " 
+      LOG(ERROR) << "[PAXOS] Received prepare from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PAXOS_PROMISE:
-      LOG(ERROR) << "[Paxos] Received promise from " 
+      LOG(ERROR) << "[PAXOS] Received promise from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessPromiseMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PAXOS_ACCEPT_REQUEST:
-      LOG(ERROR) << "[Paxos] Received accept from " 
+      LOG(ERROR) << "[PAXOS] Received accept request from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessAcceptRequestMsg(std::move(context),
                                                   std::move(request));
 
     case Request::TYPE_PAXOS_ACCEPT:
-      LOG(ERROR) << "[Paxos] Received learn from " 
+      LOG(ERROR) << "[PAXOS] Received accept from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));

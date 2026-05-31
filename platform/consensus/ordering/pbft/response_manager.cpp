@@ -354,7 +354,6 @@ int ResponseManager::DoBatch(
   new_request->set_proxy_id(config_.GetSelfInfo().id());
   new_request->set_seq(seq_++);
   uint32_t next_primary = GetNextPrimary(); 
-  LOG(ERROR) << "[PROXY] Sending new txns to " << next_primary << " with seq " << new_request->seq(); 
   replica_communicator_->SendMessage(*new_request, next_primary);
   send_num_++;
   LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
