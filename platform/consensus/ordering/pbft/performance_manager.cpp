@@ -134,7 +134,6 @@ int PerformanceManager::ProcessResponseMsg(std::unique_ptr<Context> context,
   std::string hash = request->hash();
   int32_t primary_id = request->primary_id();
   uint64_t seq = request->seq();
-  LOG(ERROR) << "[PROXY] Recv seq: " << seq; 
   // Add the response message, and use the call back to collect the received
   // messages.
   // The callback will be triggered if it received f+1 messages.
@@ -275,7 +274,6 @@ int PerformanceManager::BatchProposeMsg() {
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
     if (send_num_ >= config_.GetMaxProcessTxn()) {
-      LOG(ERROR) << "[PROXY] Send num at maximum, sleeping..."; 
 
       usleep(100000);
       continue;
