@@ -343,7 +343,6 @@ int PerformanceManager::DoBatch(
 
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
-  LOG(ERROR) << "[PROXY] Settings seq: " << seq_ << std::endl; 
   new_request->set_seq(seq_++);
 
   uint32_t next_primary = GetNextPrimary(); 
