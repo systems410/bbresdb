@@ -68,7 +68,12 @@ message Request {
         TYPE_2PC_COMMIT = 26;
         TYPE_2PC_NEW_TXNS = 27;
 
-        NUM_OF_TYPE = 28; // the total number of types.
+        TYPE_RAFT_VOTE_REQUEST = 28;
+        TYPE_RAFT_VOTE_RESPONSE = 29;
+        TYPE_RAFT_APPEND_ENTRIES = 30;
+        TYPE_RAFT_APPEND_ENTRIES_RESPONSE = 31;
+
+        NUM_OF_TYPE = 32; // the total number of types.
                        // Used to create the collector.
     };
     int32 type = 1;

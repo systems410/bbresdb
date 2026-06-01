@@ -41,6 +41,9 @@ cc_library(
     name = "response_manager",
     srcs = ["response_manager.cpp"],
     hdrs = ["response_manager.h"],
+    visibility = [
+        "//platform/consensus/ordering/raft:__pkg__",
+    ],
     deps = [
         ":lock_free_collector_pool",
         "//platform/consensus/ordering/common:transaction_utils",

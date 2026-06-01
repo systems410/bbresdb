@@ -149,3 +149,14 @@ cc_proto_library(
         ":system_info_data_proto",
     ],
 )
+
+proto_library(
+    name = "raft_message_proto",
+    srcs = ["raft_message.proto"],
+    deps = [],
+)
+
+cc_proto_library(
+    name = "raft_message_cc_proto",
+    deps = [":raft_message_proto"],
+)
