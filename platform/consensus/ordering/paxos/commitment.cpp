@@ -200,6 +200,8 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   LOG(ERROR) << "[PAXOS] Sending propose to self shard"; 
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
+
+  return 0; 
 }
 
 int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
@@ -282,6 +284,7 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   uint64_t seq = request->seq();
   std::unique_ptr<Request> promise_request = nullptr; 
   if (message_manager_->HasAccepted(seq)) { 
+    LOG(ERROR) << "[PAXOS] Message managaer has accepted";
     promise_request = resdb::NewRequest(Request::TYPE_PAXOS_PROMISE, 
                                         *message_manager_->GetPromisedRequest(seq), 
                                         config_.GetSelfInfo().id(), 
@@ -290,7 +293,9 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     auto [accepted_id, accepted_node_id] = message_manager_->GetAcceptedIds(seq); 
     promise_request->set_accepted_paxos_id(accepted_id); 
     promise_request->set_accepted_node_id(accepted_node_id);
+    promise_request->set_paxos_id(request->paxos_id());
   } else { 
+    LOG(ERROR) << "[PAXOS] Message managaer has NOT accepted";
     promise_request = resdb::NewRequest(Request::TYPE_PAXOS_PROMISE, 
                                         *request, config_.GetSelfInfo().id(), 
                                         config_.GetSelfShard());

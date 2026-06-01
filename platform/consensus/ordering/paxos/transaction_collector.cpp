@@ -105,13 +105,14 @@ int TransactionCollector::AddRequest(
   };
 
   bool promised_higher = false; 
-  LOG(ERROR) << "[PROXY] request paxos id: " << request->paxos_id() 
-             << " highest promise id: " << highest_promise_id_
-             << " highest promise node id: " << highest_promise_node_id_ 
-             << " seq : " << request->seq() << " type " << request->type(); 
-
-  if (request->type() == Request::TYPE_PAXOS_PROMISE || 
+  if (request->type() == Request::TYPE_PAXOS_PREPARE || 
       request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST) { 
+
+    LOG(ERROR) << "[PROMISE] request paxos id: " << request->paxos_id() 
+              << " highest promise id: " << highest_promise_id_
+              << " highest promise node id: " << highest_promise_node_id_ 
+              << " seq : " << request->seq() << " type " << request->type(); 
+
     if (request->paxos_id() == highest_promise_id_) { 
       promised_higher = request->sender_id() < highest_promise_node_id_;  
     } else { 
@@ -124,8 +125,11 @@ int TransactionCollector::AddRequest(
     }
 
     if (request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST && !promised_higher) { 
+      LOG(ERROR) << "[PAXOS] I have now accepted!"; 
+
       has_accepted_ = true; 
     }
+    LOG(ERROR)<< "[PROMISE] promised higher: " << promised_higher;  
   }
   // We need to update the main request if the promiser accepted a higher id 
   // and this is the highest accepted id we have seen 
@@ -141,6 +145,7 @@ int TransactionCollector::AddRequest(
     auto request_info = std::make_unique<RequestInfo>();
     request_info->signature = signature;
     request_info->request = std::move(request);
+    atomic_main_request_.Clear();
     int ret = atomic_main_request_.Set(request_info);
     if (!ret) {
       other_main_request_.insert(std::move(request_info));

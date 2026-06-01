@@ -128,20 +128,34 @@ Request* MessageManager::GetPromisedRequest(uint64_t seq) {
 bool MessageManager::MayConsensusChangeStatus(
     int type, int received_count, TransactionCollector::PaxosStatus& status,
     bool has_promised_higher) {
+
+  if (*status.learner != TransactionStatue::None) { 
+    return false;
+  }
   switch (type) {
     // Received by the acceptor 
     case Request::TYPE_PAXOS_PREPARE:
       if ((*status.acceptor == TransactionStatue::None)) {
+        LOG(ERROR) << "[PAXOS] Message manager prepare accepter is none";
         TransactionStatue old_status = TransactionStatue::None;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::PROMISED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
-      } else if (*status.acceptor == TransactionStatue::PROMISED && !has_promised_higher) { 
+      } else if (has_promised_higher) { 
+        return false; 
+      } else if (*status.acceptor == TransactionStatue::PROMISED) { 
+        LOG(ERROR) << "[PAXOS] Message manager prepare promised and not promised higher";
         TransactionStatue old_status = TransactionStatue::PROMISED;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::PROMISED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
-      }
+      } else if (*status.acceptor == TransactionStatue::ACCEPTED) { 
+        LOG(ERROR) << "[PAXOS] Message manager prepare accepted and not promised higher";
+        TransactionStatue old_status = TransactionStatue::ACCEPTED;
+        return status.acceptor->compare_exchange_strong(
+            old_status, TransactionStatue::ACCEPTED,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+      } 
       break;
     // Received by the proposer 
     case Request::TYPE_PAXOS_PROMISE:
@@ -160,9 +174,7 @@ bool MessageManager::MayConsensusChangeStatus(
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::ACCEPTED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
-      } else { 
-        LOG(ERROR) << "[PAXOS] Recieved accept request, but could not transition. Promised higher: " << has_promised_higher;
-      }
+      }  
       break;
     // Received by the learner 
     case Request::TYPE_PAXOS_ACCEPT: 

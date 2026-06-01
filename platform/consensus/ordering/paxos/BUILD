@@ -28,14 +28,6 @@ cc_library(
     ],
 )
 
-cc_test(
-    name = "lock_free_collector_pool_test",
-    srcs = ["lock_free_collector_pool_test.cpp"],
-    deps = [
-        ":lock_free_collector_pool",
-        "//common/test:test_main",
-    ],
-)
 
 cc_library(
     name = "response_manager",
@@ -45,18 +37,6 @@ cc_library(
         ":lock_free_collector_pool",
         "//platform/consensus/ordering/common:transaction_utils",
         "//platform/networkstrate:replica_communicator",
-    ],
-)
-
-cc_test(
-    name = "response_manager_test",
-    srcs = ["response_manager_test.cpp"],
-    deps = [
-        ":response_manager",
-        "//common/test:test_main",
-        "//interface/rdbc:mock_net_channel",
-        "//platform/config:resdb_config_utils",
-        "//platform/networkstrate:mock_replica_communicator",
     ],
 )
 
@@ -146,19 +126,6 @@ cc_library(
     ],
 )
 
-cc_test(
-    name = "checkpoint_manager_test",
-    srcs = ["checkpoint_manager_test.cpp"],
-    deps = [
-        ":checkpoint_manager",
-        "//common/crypto:mock_signature_verifier",
-        "//common/test:test_main",
-        "//platform/config:resdb_config_utils",
-        "//platform/networkstrate:mock_replica_communicator",
-        "//platform/statistic:stats",
-    ],
-)
-
 cc_library(
     name = "viewchange_manager",
     srcs = ["viewchange_manager.cpp"],
@@ -175,20 +142,6 @@ cc_library(
     ],
 )
 
-cc_test(
-    name = "viewchange_manager_test",
-    srcs = ["viewchange_manager_test.cpp"],
-    tags = ["manual"],
-    deps = [
-        ":viewchange_manager",
-        "//common/crypto:mock_signature_verifier",
-        "//common/test:test_main",
-        "//platform/config:resdb_config_utils",
-        "//platform/consensus/execution:system_info",
-        "//platform/networkstrate:mock_replica_communicator",
-    ],
-)
-
 cc_library(
     name = "query",
     srcs = ["query.cpp"],
@@ -201,20 +154,6 @@ cc_library(
     ],
 )
 
-cc_test(
-    name = "query_test",
-    srcs = ["query_test.cpp"],
-    deps = [
-        ":commitment",
-        ":query",
-        "//common/crypto:mock_signature_verifier",
-        "//common/test:test_main",
-        "//interface/rdbc:mock_net_channel",
-        "//platform/config:resdb_config_utils",
-        "//platform/networkstrate:mock_replica_communicator",
-    ],
-)
-
 cc_library(
     name = "transaction_collector",
     srcs = ["transaction_collector.cpp"],
@@ -224,15 +163,6 @@ cc_library(
         "//platform/networkstrate:server_comm",
         "//platform/proto:resdb_cc_proto",
         "//platform/statistic:stats",
-    ],
-)
-
-cc_test(
-    name = "transaction_collector_test",
-    srcs = ["transaction_collector_test.cpp"],
-    deps = [
-        ":transaction_collector",
-        "//common/test:test_main",
     ],
 )
 

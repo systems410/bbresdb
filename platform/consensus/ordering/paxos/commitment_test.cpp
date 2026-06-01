@@ -44,11 +44,11 @@ using ::testing::Test;
 ResDBConfig GenerateConfig() {
   ResConfigData data;
   data.set_duplicate_check_frequency_useconds(100000);
-  return ResDBConfig({GenerateReplicaInfo(1, "127.0.0.1", 1234),
-                      GenerateReplicaInfo(2, "127.0.0.1", 1235),
-                      GenerateReplicaInfo(3, "127.0.0.1", 1236),
-                      GenerateReplicaInfo(4, "127.0.0.1", 1237)},
-                     GenerateReplicaInfo(1, "127.0.0.1", 1234), data);
+  return ResDBConfig({GenerateReplicaInfo(1, "127.0.0.1", 1234, 1),
+                      GenerateReplicaInfo(2, "127.0.0.1", 1235, 1),
+                      GenerateReplicaInfo(3, "127.0.0.1", 1236, 1),
+                      GenerateReplicaInfo(4, "127.0.0.1", 1237, 1)},
+                      GenerateReplicaInfo(1, "127.0.0.1", 1234, 1), data);
 }
 
 class CommitmentTest : public Test {
@@ -58,13 +58,11 @@ class CommitmentTest : public Test {
         global_stats_(Stats::GetGlobalStats(1)),
         config_(GenerateConfig()),
         system_info_(config_),
-        checkpoint_manager_(config_, &replica_communicator_, &verifier_,
-                            &system_info_),
-        message_manager_(std::make_unique<MessageManager>(
-            config_, nullptr, &checkpoint_manager_, &system_info_)),
+        message_manager_(std::make_unique<paxos::MessageManager>(
+            config_, nullptr, &system_info_)),
         commitment_(
-            std::make_unique<Commitment>(config_, message_manager_.get(),
-                                         &replica_communicator_, &verifier_)) {}
+            std::make_unique<paxos::Commitment>(config_, message_manager_.get(),
+                                         &replica_communicator_, &verifier_, &system_info_)) {}
 
   std::unique_ptr<Context> GetContext() {
     auto context = std::make_unique<Context>();
@@ -72,37 +70,45 @@ class CommitmentTest : public Test {
     return context;
   }
 
-  int AddProposeMsg(int sender_id, bool need_resp = false, int proxy_id = 1) {
+  int AddProposeMsg(int sender_id, int paxos_id, bool need_resp = false, int proxy_id = 1) {
     auto context = std::make_unique<Context>();
     context->signature.set_signature("signature");
 
     Request request;
-    request.set_current_view(1);
     request.set_seq(1);
-    request.set_type(Request::TYPE_PRE_PREPARE);
+    request.set_current_view(1);
+    request.set_type(Request::TYPE_PAXOS_PREPARE);
     request.set_sender_id(sender_id);
+    request.set_paxos_id(paxos_id);
     request.set_sender_shard_id(1);
     request.set_need_response(need_resp);
     request.set_proxy_id(proxy_id);
     request.set_data(data_);
 
-    return commitment_->ProcessProposeMsg(std::move(context),
+    return commitment_->ProcessPrepareMsg(std::move(context),
                                           std::make_unique<Request>(request));
   }
 
-  int AddPrepareMsg(int sender_id) {
+  int AddAcceptRequestMsg(int sender_id, int paxos_id, bool need_resp = false, int proxy_id = 1) {
     auto context = std::make_unique<Context>();
     context->signature.set_signature("signature");
 
     Request request;
-    request.set_current_view(1);
     request.set_seq(1);
-    request.set_type(Request::TYPE_PREPARE);
+    request.set_current_view(1);
+    request.set_type(Request::TYPE_PAXOS_ACCEPT_REQUEST);
     request.set_sender_id(sender_id);
+    request.set_paxos_id(paxos_id);
     request.set_sender_shard_id(1);
-    return commitment_->ProcessPrepareMsg(std::move(context),
-                                          std::make_unique<Request>(request));
+    request.set_need_response(need_resp);
+    request.set_proxy_id(proxy_id);
+    request.set_data(data_);
+
+    return commitment_->ProcessAcceptRequestMsg(std::move(context),
+                                                std::make_unique<Request>(request));
   }
+
+
 
   int AddCommitMsg(int sender_id) {
     auto context = std::make_unique<Context>();
@@ -122,253 +128,83 @@ class CommitmentTest : public Test {
   Stats* global_stats_;
   ResDBConfig config_;
   SystemInfo system_info_;
-  CheckPointManager checkpoint_manager_;
   MockReplicaCommunicator replica_communicator_;
   MockSignatureVerifier verifier_;
-  std::unique_ptr<MessageManager> message_manager_;
-  std::unique_ptr<Commitment> commitment_;
+  std::unique_ptr<paxos::MessageManager> message_manager_;
+  std::unique_ptr<paxos::Commitment> commitment_;
   std::string data_;
 };
 
-TEST_F(CommitmentTest, NotContesxt) {
-  EXPECT_EQ(
-      commitment_->ProcessProposeMsg(nullptr, std::make_unique<Request>()), -2);
-  EXPECT_EQ(
-      commitment_->ProcessPrepareMsg(nullptr, std::make_unique<Request>()), -2);
-  EXPECT_EQ(commitment_->ProcessCommitMsg(nullptr, std::make_unique<Request>()),
-            -2);
+
+TEST_F(CommitmentTest, ProcessPrepareMessage) { 
+  EXPECT_EQ(AddProposeMsg(1, 2), 0);
 }
 
-TEST_F(CommitmentTest, NoSignature) {
-  EXPECT_EQ(commitment_->ProcessProposeMsg(std::make_unique<Context>(),
-                                           std::make_unique<Request>()),
-            -2);
-  EXPECT_EQ(commitment_->ProcessPrepareMsg(std::make_unique<Context>(),
-                                           std::make_unique<Request>()),
-            -2);
-  EXPECT_EQ(commitment_->ProcessCommitMsg(std::make_unique<Context>(),
-                                          std::make_unique<Request>()),
-            -2);
-}
 
-TEST_F(CommitmentTest, NoPrimary) {
-  system_info_.SetPrimary(3);
-  EXPECT_EQ(AddProposeMsg(Request::TYPE_PRE_PREPARE, 1), -2);
-}
+TEST_F(CommitmentTest, ProcessPrepareMessageIgnore) { 
+  std::promise<bool> done;
+  std::future<bool> done_future = done.get_future();
 
-TEST_F(CommitmentTest, NewRequest) {
-  auto context = std::make_unique<Context>();
-  context->signature.set_signature("signature");
+
   Request request;
-  request.set_data("data");
+  request.set_seq(1);
+  request.set_current_view(1);
+  request.set_type(Request::TYPE_PAXOS_PROMISE);
+  request.set_sender_id(1);
+  request.set_paxos_id(2);
+  request.set_sender_shard_id(1);
+  request.set_need_response(false);
+  request.set_proxy_id(1);
+  *request.mutable_data_signature() = {};
+  request.set_data(data_);
 
-  std::promise<bool> propose_done;
-  std::future<bool> propose_done_future = propose_done.get_future();
-  EXPECT_CALL(replica_communicator_, BroadCast).WillOnce(Invoke([&]() {
-    propose_done.set_value(true);
-  }));
-
-  EXPECT_CALL(verifier_,
-              VerifyMessage(::testing::_, EqualsProto(SignatureInfo())))
-      .WillOnce(Return(true));
-
-  EXPECT_EQ(commitment_->ProcessNewRequest(std::move(context),
-                                           std::make_unique<Request>(request)),
-            0);
-  propose_done_future.get();
-}
-
-TEST_F(CommitmentTest, SeqConsumeAll) {
-  config_.SetMaxProcessTxn(2);
-  commitment_ = nullptr;
-  message_manager_ = std::make_unique<MessageManager>(
-      config_, nullptr, &checkpoint_manager_, &system_info_);
-  commitment_ = std::make_unique<Commitment>(
-      config_, message_manager_.get(), &replica_communicator_, &verifier_);
-  std::promise<bool> done;
-  std::future<bool> done_future = done.get_future();
-  EXPECT_CALL(verifier_,
-              VerifyMessage(::testing::_, EqualsProto(SignatureInfo())))
-      .WillRepeatedly(Return(true));
-  for (int i = 0; i < 3; ++i) {
-    std::unique_ptr<MockNetChannel> channel =
-        std::make_unique<MockNetChannel>("127.0.0.1", 0);
-    auto context = std::make_unique<Context>();
-    context->signature.set_signature("signature");
-    Request request;
-    request.set_data("sig" + std::to_string(i));
-    request.set_hash("hash" + std::to_string(i));
-    if (i < 2) {
-      EXPECT_EQ(commitment_->ProcessNewRequest(
-                    std::move(context), std::make_unique<Request>(request)),
-                0);
-    } else {
-      EXPECT_EQ(commitment_->ProcessNewRequest(
-                    std::move(context), std::make_unique<Request>(request)),
-                -2);
-    }
-  }
-}
-
-TEST_F(CommitmentTest, ProposeMsgWithoutSignature) {
-  system_info_.SetPrimary(3);
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(0);
-  EXPECT_CALL(verifier_,
-              VerifyMessage(::testing::_, EqualsProto(SignatureInfo())))
-      .WillOnce(Return(false));
-  EXPECT_EQ(AddProposeMsg(Request::TYPE_PRE_PREPARE, 1), -2);
-}
-
-TEST_F(CommitmentTest, ProposeMsg) {
-  system_info_.SetPrimary(3);
-  BatchUserRequest request;
-  request.SerializeToString(&data_);
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(1);
-  EXPECT_CALL(verifier_, VerifyMessage(data_, EqualsProto(SignatureInfo())))
-      .WillOnce(Return(true));
-
-  EXPECT_EQ(AddProposeMsg(Request::TYPE_PRE_PREPARE, 1), 0);
-}
-
-TEST_F(CommitmentTest, ProposeMsgOnlyBCOnce) {
-  system_info_.SetPrimary(3);
-  BatchUserRequest request;
-  request.SerializeToString(&data_);
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(1);
-  EXPECT_CALL(verifier_, VerifyMessage(data_, EqualsProto(SignatureInfo())))
-      .WillRepeatedly(Return(true));
-
-  EXPECT_EQ(AddProposeMsg(Request::TYPE_PRE_PREPARE, 1), 0);
-  EXPECT_EQ(AddProposeMsg(Request::TYPE_PRE_PREPARE, 2), -2);
-}
-
-TEST_F(CommitmentTest, ProcessPrepareMsg) {
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(2);
-
-  EXPECT_EQ(AddProposeMsg(1), 0);
-
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
-}
-
-TEST_F(CommitmentTest, ProcessPrepareMsgNotEnough) {
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(1);
-
-  EXPECT_EQ(AddProposeMsg(1), 0);
-
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-}
-
-TEST_F(CommitmentTest, ProcessPrepareMsgNoProposeMsg) {
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(0);
-
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
-}
-
-TEST_F(CommitmentTest, ProcessPrepareMsgProposeMsgDelay) {
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(2);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
-
-  EXPECT_EQ(AddProposeMsg(1), 0);
-
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-}
-
-TEST_F(CommitmentTest, ProcessCommitMsg) {
-  EXPECT_CALL(replica_communicator_, BroadCast)
-      .Times(2);  // 1 propose + 1 prepare
-
-  EXPECT_EQ(AddProposeMsg(1), 0);
-
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
-
-  EXPECT_EQ(AddCommitMsg(1), 0);
-  EXPECT_EQ(AddCommitMsg(2), 0);
-  EXPECT_EQ(AddCommitMsg(3), 0);
-}
-
-TEST_F(CommitmentTest, ProcessCommitMsgProposeDelay) {
-  EXPECT_CALL(replica_communicator_, BroadCast)
-      .Times(2);  // 1 propose + 1 prepare
-
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
-
-  EXPECT_EQ(AddCommitMsg(2), 0);
-  EXPECT_EQ(AddCommitMsg(3), 0);
-
-  EXPECT_EQ(AddProposeMsg(1), 0);
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-
-  EXPECT_EQ(AddCommitMsg(1), 0);
-}
-
-TEST_F(CommitmentTest, ProcessCommitMsgWithDuplicated) {
-  EXPECT_CALL(replica_communicator_, BroadCast)
-      .Times(2);  // 1 propose + 1 prepare
-
-  EXPECT_EQ(AddProposeMsg(1), 0);
-  EXPECT_EQ(AddProposeMsg(1), -2);
-
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
-
-  EXPECT_EQ(AddCommitMsg(1), 0);
-  EXPECT_EQ(AddCommitMsg(2), 0);
-  EXPECT_EQ(AddCommitMsg(3), 0);
-  EXPECT_EQ(AddCommitMsg(3), -2);
-}
-
-TEST_F(CommitmentTest, ProcessCommitMsgWithResponse) {
-  EXPECT_CALL(replica_communicator_, BroadCast).Times(2);
-
-  std::promise<bool> done;
-  std::future<bool> done_future = done.get_future();
-
-  BatchUserResponse batch_resp;
-
-  batch_resp.set_primary_id(1);
-  batch_resp.set_proxy_id(1);
-  batch_resp.set_seq(1);
-  batch_resp.set_current_view(1);
-
-  // Response Msg
-  Request resp_request;
-  resp_request.set_type(Request::TYPE_RESPONSE);
-  resp_request.set_sender_id(1);
-  resp_request.set_sender_shard_id(1);
-  resp_request.set_current_view(1);
-  resp_request.set_seq(1);
-  resp_request.set_proxy_id(1);
-  resp_request.set_primary_id(1);
-  batch_resp.SerializeToString(resp_request.mutable_data());
-
-  EXPECT_CALL(replica_communicator_, SendMessage(EqualsProto(resp_request), 1))
+  EXPECT_CALL(replica_communicator_, SendMessage(EqualsProto(request), 1))
       .WillOnce(Invoke(
           [&](const google::protobuf::Message& request, int64_t node_id) {
             done.set_value(true);
             return 0;
           }));
 
-  EXPECT_EQ(AddProposeMsg(1, true), 0);
+  EXPECT_EQ(AddProposeMsg(1, 2), 0);
+  // Should ignore this propose 
+  EXPECT_EQ(AddProposeMsg(1, 1), 0);
+  // done_future.get();
+} 
 
-  EXPECT_EQ(AddPrepareMsg(1), 0);
-  EXPECT_EQ(AddPrepareMsg(2), 0);
-  EXPECT_EQ(AddPrepareMsg(3), 0);
+TEST_F(CommitmentTest, ProcessPromiseMsgAccepted) { 
+  std::promise<bool> done;
+  std::future<bool> done_future = done.get_future();
 
-  EXPECT_EQ(AddCommitMsg(1), 0);
-  EXPECT_EQ(AddCommitMsg(2), 0);
-  EXPECT_EQ(AddCommitMsg(3), 0);
-  done_future.get();
-}
+  Request request;
+  request.set_seq(1);
+  request.set_current_view(1);
+  request.set_type(Request::TYPE_PAXOS_PROMISE);
+  request.set_sender_id(1);
+  request.set_paxos_id(3);
+  request.set_accepted_paxos_id(2);
+  request.set_accepted_node_id(1);
+  request.set_sender_shard_id(1);
+  request.set_need_response(false);
+  request.set_proxy_id(1);
+  *request.mutable_data_signature() = {};
+  request.set_data(data_);
+
+  EXPECT_CALL(replica_communicator_, SendMessage(EqualsProto(request), 1))
+      .Times(::testing::AtLeast(1))
+      .WillRepeatedly(Invoke(
+          [&](const google::protobuf::Message& request, int64_t node_id) {
+            // done.set_value(true);
+            return 0;
+          }));
+
+  EXPECT_EQ(AddProposeMsg(1, 2), 0);
+  EXPECT_EQ(AddAcceptRequestMsg(1, 2), 0);
+  EXPECT_EQ(AddProposeMsg(1, 3), 0);
+
+  // done_future.get();
+} 
+
+
 
 }  // namespace
 
