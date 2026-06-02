@@ -133,16 +133,7 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
       }
       return ret;
     }
-    case Request::TYPE_PAXOS_PREPARE:
-      LOG(ERROR) << "[PAXOS] Received prepare from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
-      return commitment_->ProcessPrepareMsg(std::move(context),
-                                            std::move(request));
-    case Request::TYPE_PAXOS_PROMISE:
-      LOG(ERROR) << "[PAXOS] Received promise from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id();
-      return commitment_->ProcessPromiseMsg(std::move(context),
-                                            std::move(request));
+
     case Request::TYPE_PAXOS_ACCEPT_REQUEST:
       LOG(ERROR) << "[PAXOS] Received accept request from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
@@ -152,8 +143,13 @@ int ConsensusManagerPaxos::InternalConsensusCommit(
     case Request::TYPE_PAXOS_ACCEPT:
       LOG(ERROR) << "[PAXOS] Received accept from " 
                  << request->sender_id() << " with shard id " << request->sender_shard_id();
-      return commitment_->ProcessCommitMsg(std::move(context),
+      return commitment_->ProcessAcceptMsg(std::move(context),
                                            std::move(request));
+
+    case Request::TYPE_PAXOS_LEARN: 
+      return commitment_->ProcessCommitMsg(std::move(context), 
+                                           std::move(request));
+
 
     case Request::TYPE_REPLICA_STATE:
       return query_->ProcessGetReplicaState(std::move(context),

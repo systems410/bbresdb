@@ -133,44 +133,15 @@ bool MessageManager::MayConsensusChangeStatus(
     return false;
   }
   switch (type) {
-    // Received by the acceptor 
-    case Request::TYPE_PAXOS_PREPARE:
-      if ((*status.acceptor == TransactionStatue::None)) {
-        LOG(ERROR) << "[PAXOS] Message manager prepare accepter is none";
+    case Request::TYPE_PAXOS_ACCEPT_REQUEST:
+      if (*status.acceptor == TransactionStatue::None) {
         TransactionStatue old_status = TransactionStatue::None;
-        return status.acceptor->compare_exchange_strong(
-            old_status, TransactionStatue::PROMISED,
-            std::memory_order_acq_rel, std::memory_order_acq_rel);
-      } else if (has_promised_higher) { 
-        return false; 
-      } else if (*status.acceptor == TransactionStatue::PROMISED) { 
-        LOG(ERROR) << "[PAXOS] Message manager prepare promised and not promised higher";
-        TransactionStatue old_status = TransactionStatue::PROMISED;
-        return status.acceptor->compare_exchange_strong(
-            old_status, TransactionStatue::PROMISED,
-            std::memory_order_acq_rel, std::memory_order_acq_rel);
-      } else if (*status.acceptor == TransactionStatue::ACCEPTED) { 
-        LOG(ERROR) << "[PAXOS] Message manager prepare accepted and not promised higher";
-        TransactionStatue old_status = TransactionStatue::ACCEPTED;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::ACCEPTED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
-      } 
-      break;
-    // Received by the proposer 
-    case Request::TYPE_PAXOS_PROMISE:
-      if (*status.proposer == TransactionStatue::None &&
-          config_.GetMinDataReceiveNum() <= received_count) {
-        TransactionStatue old_status = TransactionStatue::None;
-        return status.proposer->compare_exchange_strong(
-            old_status, TransactionStatue::PROMISES_RECEIVED,
-            std::memory_order_acq_rel, std::memory_order_acq_rel);
-      }
-      break;
-    // Received by the acceptor 
-    case Request::TYPE_PAXOS_ACCEPT_REQUEST:
-      if (*status.acceptor == TransactionStatue::PROMISED && !has_promised_higher) {
-        TransactionStatue old_status = TransactionStatue::PROMISED;
+      }  
+      if (*status.acceptor == TransactionStatue::ACCEPTED) {
+        TransactionStatue old_status = TransactionStatue::ACCEPTED;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::ACCEPTED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
@@ -178,6 +149,16 @@ bool MessageManager::MayConsensusChangeStatus(
       break;
     // Received by the learner 
     case Request::TYPE_PAXOS_ACCEPT: 
+      LOG(ERROR) << "[PAXOS] Received accept, have " << received_count << " need " << config_.GetMinDataReceiveNum(); 
+      if (*status.proposer == TransactionStatue::None
+        && config_.GetMinDataReceiveNum() <= received_count) {
+        TransactionStatue old_status = TransactionStatue::None;
+        return status.learner->compare_exchange_strong(
+            old_status, TransactionStatue::READY_EXECUTE,
+            std::memory_order_acq_rel, std::memory_order_acq_rel);
+      }
+      break;
+    case Request::TYPE_PAXOS_LEARN: 
       LOG(ERROR) << "[PAXOS] Received accept, have " << received_count << " need " << config_.GetMinDataReceiveNum(); 
       if (*status.learner == TransactionStatue::None 
         && config_.GetMinDataReceiveNum() <= received_count) {
@@ -211,7 +192,7 @@ CollectorResultCode MessageManager::AddConsensusMsg(
   // Main request only updated if nothing else has been accepted 
   bool has_accepted = collector_pool_->GetCollector(seq)->HasAccepted(); 
   int ret = collector_pool_->GetCollector(seq)->AddRequest(
-      std::move(request), signature, type == Request::TYPE_PAXOS_PREPARE && !has_accepted,
+      std::move(request), signature, type == Request::TYPE_PAXOS_ACCEPT_REQUEST,
       [&](const Request& request, int received_count,
           TransactionCollector::CollectorDataType* data,
           TransactionCollector::PaxosStatus& status, bool promised_higher) {

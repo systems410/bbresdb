@@ -54,6 +54,8 @@ class Commitment {
   int ProcessAcceptRequestMsg(std::unique_ptr<Context> context, 
                               std::unique_ptr<Request> request);
 
+  int ProcessAcceptMsg(std::unique_ptr<Context> context, 
+                              std::unique_ptr<Request> request);
   void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
   void SetNeedCommitQC(bool need_qc);
 

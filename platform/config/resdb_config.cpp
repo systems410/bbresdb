@@ -171,7 +171,7 @@ size_t ResDBConfig::GetReplicaNum(uint32_t shard_id) const
 
 int ResDBConfig::GetMinDataReceiveNum() const {
   int f = (GetReplicaNumInSelfShard()) / 3;
-  return std::max(2 * f + 1, 1);
+  return std::max(f + 1, 1);
 }
 
 int ResDBConfig::GetMinDataReceiveNum(uint32_t num_replicas) const {
