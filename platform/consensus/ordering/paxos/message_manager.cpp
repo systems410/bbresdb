@@ -149,7 +149,6 @@ bool MessageManager::MayConsensusChangeStatus(
       break;
     // Received by the learner 
     case Request::TYPE_PAXOS_ACCEPT: 
-      LOG(ERROR) << "[PAXOS] Received accept, have " << received_count << " need " << config_.GetMinDataReceiveNum(); 
       if (*status.proposer == TransactionStatue::None
         && config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
@@ -159,7 +158,6 @@ bool MessageManager::MayConsensusChangeStatus(
       }
       break;
     case Request::TYPE_PAXOS_LEARN: 
-      LOG(ERROR) << "[PAXOS] Received accept, have " << received_count << " need " << config_.GetMinDataReceiveNum(); 
       if (*status.learner == TransactionStatue::None 
         && config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;

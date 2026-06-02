@@ -125,11 +125,9 @@ int TransactionCollector::AddRequest(
     }
 
     if (request->type() == Request::TYPE_PAXOS_ACCEPT_REQUEST && !promised_higher) { 
-      LOG(ERROR) << "[PAXOS] I have now accepted!"; 
 
       has_accepted_ = true; 
     }
-    LOG(ERROR)<< "[PROMISE] promised higher: " << promised_higher;  
   }
   // We need to update the main request if the promiser accepted a higher id 
   // and this is the highest accepted id we have seen 

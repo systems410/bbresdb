@@ -334,7 +334,6 @@ void ReplicaCommunicator::SendMessageToShard(const google::protobuf::Message& me
   std::vector<ReplicaInfo> targets; 
   for (const auto& replica : replicas_) {
     if (replica.shard_id() == shard_id) {
-      LOG(ERROR) << "[PAXOS] Sending message to replica: " << replica.id(); 
       SendMessage(message, replica.id());
     }
   }

@@ -354,7 +354,6 @@ void TransactionExecutor::Execute(std::unique_ptr<Request> request,
   if (response == nullptr) {
     response = std::make_unique<BatchUserResponse>();
   }
-  LOG(ERROR) << "[EXE] Incrementing total requests by " << batch_request_p->user_requests_size(); 
   global_stats_->IncTotalRequest(batch_request_p->user_requests_size());
   response->set_proxy_id(batch_request_p->proxy_id());
   response->set_createtime(batch_request_p->createtime() +
