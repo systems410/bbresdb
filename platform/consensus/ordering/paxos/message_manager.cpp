@@ -136,7 +136,6 @@ bool MessageManager::MayConsensusChangeStatus(
     // Received by the acceptor 
     case Request::TYPE_PAXOS_PREPARE:
       if ((*status.acceptor == TransactionStatue::None)) {
-        LOG(ERROR) << "[PAXOS] Message manager prepare accepter is none";
         TransactionStatue old_status = TransactionStatue::None;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::PROMISED,
@@ -144,13 +143,11 @@ bool MessageManager::MayConsensusChangeStatus(
       } else if (has_promised_higher) { 
         return false; 
       } else if (*status.acceptor == TransactionStatue::PROMISED) { 
-        LOG(ERROR) << "[PAXOS] Message manager prepare promised and not promised higher";
         TransactionStatue old_status = TransactionStatue::PROMISED;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::PROMISED,
             std::memory_order_acq_rel, std::memory_order_acq_rel);
       } else if (*status.acceptor == TransactionStatue::ACCEPTED) { 
-        LOG(ERROR) << "[PAXOS] Message manager prepare accepted and not promised higher";
         TransactionStatue old_status = TransactionStatue::ACCEPTED;
         return status.acceptor->compare_exchange_strong(
             old_status, TransactionStatue::ACCEPTED,
@@ -178,7 +175,6 @@ bool MessageManager::MayConsensusChangeStatus(
       break;
     // Received by the learner 
     case Request::TYPE_PAXOS_ACCEPT: 
-      LOG(ERROR) << "[PAXOS] Received accept, have " << received_count << " need " << config_.GetMinDataReceiveNum(); 
       if (*status.learner == TransactionStatue::None 
         && config_.GetMinDataReceiveNum() <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;

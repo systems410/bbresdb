@@ -105,7 +105,6 @@ int Commitment::ProcessPromiseMsg(std::unique_ptr<Context> context,
 
   }
   if (ret == CollectorResultCode::STATE_CHANGED) {
-    LOG(ERROR) << "[PAXOS] Sending accept request to shard";
     replica_communicator_->SendMessageToShard(*accept_request_req, config_.GetSelfShard());
   } 
   return ret == CollectorResultCode::INVALID ? -2 : 0;
@@ -137,7 +136,6 @@ int Commitment::ProcessAcceptRequestMsg(std::unique_ptr<Context> context,
                                                std::move(request));
 
   if (ret == CollectorResultCode::STATE_CHANGED) { 
-    LOG(ERROR) << "[PAXOS] Sending accept to self shard"; 
     replica_communicator_->SendMessageToShard(*accept_req, config_.GetSelfShard());
   }
 
@@ -197,7 +195,6 @@ int Commitment::ProcessNewRequest(std::unique_ptr<Context> context,
   user_request->set_primary_id(config_.GetSelfInfo().id());
   user_request->set_paxos_id(1);
 
-  LOG(ERROR) << "[PAXOS] Sending propose to self shard"; 
 
   replica_communicator_->SendMessageToShard(*user_request, config_.GetSelfShard());
 
@@ -284,7 +281,6 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
   uint64_t seq = request->seq();
   std::unique_ptr<Request> promise_request = nullptr; 
   if (message_manager_->HasAccepted(seq)) { 
-    LOG(ERROR) << "[PAXOS] Message managaer has accepted";
     promise_request = resdb::NewRequest(Request::TYPE_PAXOS_PROMISE, 
                                         *message_manager_->GetPromisedRequest(seq), 
                                         config_.GetSelfInfo().id(), 
@@ -295,7 +291,6 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     promise_request->set_accepted_node_id(accepted_node_id);
     promise_request->set_paxos_id(request->paxos_id());
   } else { 
-    LOG(ERROR) << "[PAXOS] Message managaer has NOT accepted";
     promise_request = resdb::NewRequest(Request::TYPE_PAXOS_PROMISE, 
                                         *request, config_.GetSelfInfo().id(), 
                                         config_.GetSelfShard());
@@ -322,7 +317,6 @@ int Commitment::ProcessPrepareMsg(std::unique_ptr<Context> context,
     }
 
     global_stats_->RecordStateTime("prepare");
-    LOG(ERROR) << "[PAXOS] Sending promise to " << sender; 
     replica_communicator_->SendMessage(*promise_request, sender);
   }
   return ret == CollectorResultCode::INVALID ? -2 : 0;
