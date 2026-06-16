@@ -36,9 +36,10 @@ def GenerateJsonConfig(file_name, output_file, template_file):
             info["id"] = data[0]
             info["ip"] = data[1]
             info["port"] = data[2]
+            info["shard_id"] = data[3]
             region_id = 0
-            if len(data) > 3:
-                region_id = data[3]
+            # if len(data) > 3:
+            #     region_id = data[3]
             if region_id not in tmp_config:
                     tmp_config[region_id] = []
 

@@ -31,9 +31,12 @@ std::unique_ptr<ServiceNetwork> ServerFactory::CreateResDBServer(
   if (config_handler) {
     config_handler(config.get());
   }
+
   return std::make_unique<ServiceNetwork>(
-      *config,
-      std::make_unique<twopc::ConsensusManager2PC>(*config, std::move(executor)));
+    *config, 
+    std::make_unique<twopc::ShardedConsensusManager2PC<ConsensusManagerPBFT>>(
+      *config, std::move(executor)
+    )); 
 }
 
 std::unique_ptr<ServiceNetwork> GenerateResDBServer(

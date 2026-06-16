@@ -51,11 +51,14 @@ bazel build //tools:certificate_tools
 bazel build //tools:generate_region_config
 
 idx=1
+shard_id=1
 tot=0
 for _ in ${iplist[@]};
 do
   tot=$(($tot+1))
 done
+
+total_shards=4 # assume 4 shards 
 
 echo "node num:"$tot
 
@@ -68,12 +71,19 @@ do
   # create server config
   # create the public key and certificate
   if [ $(($idx+$CLIENT_NUM)) -gt $tot ] ; then
-    $CERT_TOOLS_BIN ${output_cert_path} ${ADMIN_PRIVATE_KEY} ${ADMIN_PUBLIC_KEY} ${public_key} ${idx} ${ip} ${port} client
-    echo "${idx} ${ip} ${port}" >> client.config
+    # client goes to shard 0
+    $CERT_TOOLS_BIN ${output_cert_path} ${ADMIN_PRIVATE_KEY} ${ADMIN_PUBLIC_KEY} ${public_key} ${idx} ${ip} ${port} 0 client
+    echo "${idx} ${ip} ${port} 0" >> client.config  
   else
-    $CERT_TOOLS_BIN ${output_cert_path} ${ADMIN_PRIVATE_KEY} ${ADMIN_PUBLIC_KEY} ${public_key} ${idx} ${ip} ${port} replica
-    echo "${idx} ${ip} ${port}" >> server.config
+    $CERT_TOOLS_BIN ${output_cert_path} ${ADMIN_PRIVATE_KEY} ${ADMIN_PUBLIC_KEY} ${public_key} ${idx} ${ip} ${port} ${shard_id} replica
+    echo "${idx} ${ip} ${port} ${shard_id}" >> server.config
   fi
+
+  if (( shard_id >= total_shards )); then 
+    shard_id=1
+  else 
+    (( shard_id++ ))
+  fi 
 
   idx=$(($idx+1))
 done

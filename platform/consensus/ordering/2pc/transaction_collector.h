@@ -21,8 +21,8 @@
 
 #include <bitset>
 
-#include "platform/consensus/execution/transaction_executor.h"
 #include "platform/networkstrate/server_comm.h"
+#include "platform/networkstrate/consensus_manager.h"
 #include "platform/proto/resdb.pb.h"
 #include "platform/statistic/stats.h"
 
@@ -41,6 +41,10 @@ enum TransactionStatue {
 struct RequestInfo {
   std::unique_ptr<Request> request;
   SignatureInfo signature;
+};
+
+struct ContextInfo { 
+  std::unique_ptr<Context> context; 
 };
 
 template <typename T>
@@ -79,13 +83,9 @@ class AtomicUniquePtr {
 
 class TransactionCollector {
  public:
-  TransactionCollector(uint64_t seq, TransactionExecutor* executor,
-                       bool enable_viewchange = false)
+  TransactionCollector(uint64_t seq)
       : seq_(seq),
-        executor_(executor),
-        status_(TransactionStatue::None),
-        enable_viewchange_(enable_viewchange),
-        view_(0) {}
+        status_(TransactionStatue::None) {}
 
   ~TransactionCollector() = default;
 
@@ -101,12 +101,15 @@ class TransactionCollector {
   // Add a message and count by its hash value.
   // After it is done call_back will be triggered.
   int AddRequest(
-      std::unique_ptr<Request> request, const SignatureInfo& signature,
+      std::unique_ptr<Request> request, std::unique_ptr<Context> context,
       bool is_main_request,
       std::function<void(const Request&, int received_count,
                          CollectorDataType* data,
                          std::atomic<TransactionStatue>* status, bool force)>
-          call_back);
+          call_back, 
+      ConsensusManager* replica_cm, 
+      std::function<void()> post_commit_func=nullptr
+    );
 
   std::vector<RequestInfo> GetPreparedProof();
   TransactionStatue GetStatus() const;
@@ -118,25 +121,23 @@ class TransactionCollector {
   std::vector<std::string> GetAllStoredHash();
 
  private:
-  int Commit();
+  int Commit(ConsensusManager* replica_cm);
 
  private:
   uint64_t seq_;
-  TransactionExecutor* executor_;
   std::atomic<bool> is_committed_ = false;
   std::atomic<bool> is_prepared_ = false;
   std::vector<std::unique_ptr<Context>> context_list_;
   std::map<std::string, std::list<std::unique_ptr<RequestInfo>>>
       data_[Request::NUM_OF_TYPE];
   std::vector<std::unique_ptr<RequestInfo>> prepared_proof_;
-  AtomicUniquePtr<RequestInfo> atomic_mian_request_;
+  AtomicUniquePtr<RequestInfo> atomic_main_request_;
+  AtomicUniquePtr<ContextInfo> atomic_main_context_;
   std::atomic<TransactionStatue> status_ = TransactionStatue::None;
-  bool enable_viewchange_;
   std::mutex mutex_;
   std::vector<SignatureInfo> commit_certs_;
   std::map<std::string, std::bitset<128>> senders_[Request::NUM_OF_TYPE];
   std::set<std::unique_ptr<RequestInfo>> other_main_request_;
-  uint64_t view_;
 };
 } // namespace 2pc
 }  // namespace resdb

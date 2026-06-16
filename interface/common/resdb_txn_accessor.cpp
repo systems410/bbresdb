@@ -28,7 +28,7 @@ namespace resdb {
 
 ResDBTxnAccessor::ResDBTxnAccessor(const ResDBConfig& config)
     : config_(config),
-      replicas_(config.GetReplicaInfos()),
+      replicas_(config.GetReplicaInfos(config.GetSelfShard())),
       recv_timeout_(1) /*1s*/ {}
 
 std::unique_ptr<NetChannel> ResDBTxnAccessor::GetNetChannel(
@@ -56,6 +56,7 @@ ResDBTxnAccessor::GetTxn(uint64_t min_seq, uint64_t max_seq) {
     NetChannel* client_ptr = client.get();
     clients.push_back(std::move(client));
 
+    // recv from each shard 
     ths.push_back(std::thread(
         [&](NetChannel* client) {
           std::string response_str;
@@ -69,7 +70,7 @@ ResDBTxnAccessor::GetTxn(uint64_t min_seq, uint64_t max_seq) {
             std::unique_lock<std::mutex> lck(mtx);
             recv_count[response_str]++;
             // receive f+1 count.
-            if (recv_count[response_str] == config_.GetMinClientReceiveNum()) {
+            if (recv_count[response_str] == config_.GetMinClientReceiveNum(config_.GetSelfShard())) {
               final_str = response_str;
               success = true;
               // notify the main thread.

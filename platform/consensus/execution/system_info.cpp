@@ -26,14 +26,63 @@ namespace resdb {
 SystemInfo::SystemInfo() : primary_id_(1), view_(1) {}
 
 SystemInfo::SystemInfo(const ResDBConfig& config)
-    : primary_id_(config.GetReplicaInfos()[0].id()), view_(1) {
-  SetReplicas(config.GetReplicaInfos());
+    : self_shard_(config.GetSelfShard()), view_(1) {
+
+  if (self_shard_ == 0) { 
+    primary_id_ = 0; 
+  } else {
+    primary_id_ = (config.GetReplicaInfos(self_shard_)[0].id());
+  }
+
+  for (uint32_t shard_id : config.GetShardIds()) {
+      shard_primary_ids_[shard_id] = config.GetReplicaInfos(shard_id)[0].id();
+  }
+
+  SetReplicas(config.GetReplicaInfos(self_shard_));
   LOG(ERROR) << "get primary id:" << primary_id_;
+}
+
+void SystemInfo::SetCrossShardPrimaryId(uint32_t id, uint64_t seq) { 
+  std::lock_guard<std::mutex> lock(cross_shard_primaries_mut_);
+  cross_shard_primaries_[seq] = id; 
+}
+
+uint32_t SystemInfo::GetCrossShardPrimaryId(uint64_t seq) { 
+  std::lock_guard<std::mutex> lock(cross_shard_primaries_mut_);
+  return cross_shard_primaries_[seq];
+}
+
+
+uint32_t SystemInfo::GetPrimaryIdOfShard(uint32_t shard_id) {
+  std::lock_guard<std::mutex> lock(shard_primary_ids_mut_);
+  auto it = shard_primary_ids_.find(shard_id);
+  if (it == shard_primary_ids_.end()) { 
+    return 0; 
+  }
+  return it->second; 
+}
+
+std::set<uint32_t> SystemInfo::GetAllShardPrimaryIds() { 
+  std::lock_guard<std::mutex> lock(shard_primary_ids_mut_);
+  std::set<uint32_t> all_primaries; 
+  for (const auto& [shard_id, replica_id] : shard_primary_ids_) { 
+    all_primaries.insert(replica_id);
+  }
+  return all_primaries; 
+}
+
+void SystemInfo::SetPrimaryOfShard(uint32_t shard_id, uint32_t id) {
+  std::lock_guard<std::mutex> lock(shard_primary_ids_mut_);
+  shard_primary_ids_[shard_id] = id;  
 }
 
 uint32_t SystemInfo::GetPrimaryId() const { return primary_id_; }
 
-void SystemInfo::SetPrimary(uint32_t id) { primary_id_ = id; }
+void SystemInfo::SetPrimary(uint32_t id) { 
+  primary_id_ = id; 
+  std::lock_guard<std::mutex> lock(shard_primary_ids_mut_);
+  shard_primary_ids_[self_shard_] = id;  
+}
 
 uint64_t SystemInfo::GetCurrentView() const { return view_; }
 

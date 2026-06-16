@@ -72,6 +72,12 @@ ResponseManager::ResponseManager(const ResDBConfig& config,
   }
   global_stats_ = Stats::GetGlobalStats();
   send_num_ = 0;
+
+  const std::set<uint32_t>& shards = config_.GetShardIds(); 
+  for (uint32_t id : shards) { 
+    shard_primaries_.push_back(id);
+  }
+  current_shard_primary_idx_ = shard_primaries_[0];
 }
 
 ResponseManager::~ResponseManager() {
@@ -86,6 +92,8 @@ ResponseManager::~ResponseManager() {
 
 // use system info
 int ResponseManager::GetPrimary() { return system_info_->GetPrimaryId(); }
+
+uint32_t ResponseManager::GetPrimaryOfShard(uint32_t shard_id) { return system_info_->GetPrimaryIdOfShard(shard_id); } 
 
 int ResponseManager::AddContextList(
     std::vector<std::unique_ptr<Context>> context_list, uint64_t id) {
@@ -153,7 +161,7 @@ bool ResponseManager::MayConsensusChangeStatus(
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
-          config_.GetMinClientReceiveNum() <= received_count) {
+          config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
             old_status, TransactionStatue::EXECUTED, std::memory_order_acq_rel,
@@ -303,7 +311,7 @@ int ResponseManager::BatchProposeMsg() {
 int ResponseManager::DoBatch(
     const std::vector<std::unique_ptr<QueueItem>>& batch_req) {
   auto new_request =
-      NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id());
+      NewRequest(Request::TYPE_NEW_TXNS, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
   if (new_request == nullptr) {
     return -2;
   }
@@ -344,9 +352,12 @@ int ResponseManager::DoBatch(
   batch_request.SerializeToString(new_request->mutable_data());
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
-  replica_communicator_->SendMessage(*new_request, GetPrimary());
+  new_request->set_seq(seq_++);
+  uint32_t next_primary = GetNextPrimary(); 
+  LOG(ERROR) << "[PROXY] Sending new txns to " << next_primary << " with seq " << new_request->seq(); 
+  replica_communicator_->SendMessage(*new_request, next_primary);
   send_num_++;
-  LOG(INFO) << "send msg to primary:" << GetPrimary()
+  LOG(INFO) << "send msg to primary:" << GetPrimaryOfShard(next_primary)
             << " batch size:" << batch_req.size();
   AddWaitingResponseRequest(std::move(new_request));
   return 0;
@@ -366,6 +377,14 @@ void ResponseManager::AddWaitingResponseRequest(
   pm_lock_.unlock();
   sem_post(&request_sent_signal_);
 }
+
+uint32_t ResponseManager::GetNextPrimary() { 
+  uint32_t id = shard_primaries_[current_shard_primary_idx_];
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) {
+    current_shard_primary_idx_ = 0; 
+  } 
+  return id; 
+} 
 
 void ResponseManager::RemoveWaitingResponseRequest(const std::string& hash) {
   if (!config_.GetConfigData().enable_viewchange()) {
@@ -412,7 +431,7 @@ void ResponseManager::MonitoringClientTimeOut() {
     if (CheckTimeOut(client_timeout.hash)) {
       auto request = GetTimeOutRequest(client_timeout.hash);
       if (request) {
-        replica_communicator_->BroadCast(*request);
+        replica_communicator_->SendMessageToShard(*request, config_.GetSelfShard());
       }
     }
   }

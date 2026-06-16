@@ -17,25 +17,32 @@
  * under the License.
  */
 
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#pragma once
+
+#include "executor/common/custom_query.h"
+#include "platform/config/resdb_config.h"
+#include "platform/consensus/recovery/recovery.h"
 
 namespace resdb {
 
-std::unique_ptr<Request> NewRequest(Request::Type type, const Request& request,
-                                    int sender_id) {
-  auto new_request = std::make_unique<Request>(request);
-  new_request->set_type(type);
-  new_request->set_sender_id(sender_id);
-  return new_request;
-}
+class Query {
+ public:
+  Query(const ResDBConfig& config, Recovery* recovery,
+        std::unique_ptr<CustomQuery> executor = nullptr);
+  virtual ~Query();
 
-std::unique_ptr<Request> NewRequest(Request::Type type, const Request& request,
-                                    int sender_id, int region_id) {
-  auto new_request = std::make_unique<Request>(request);
-  new_request->set_type(type);
-  new_request->set_sender_id(sender_id);
-  new_request->mutable_region_info()->set_region_id(region_id);
-  return new_request;
-}
+  virtual int ProcessGetReplicaState(std::unique_ptr<Context> context,
+                                     std::unique_ptr<Request> request);
+  virtual int ProcessQuery(std::unique_ptr<Context> context,
+                           std::unique_ptr<Request> request);
+
+  virtual int ProcessCustomQuery(std::unique_ptr<Context> context,
+                                 std::unique_ptr<Request> request);
+
+ protected:
+  ResDBConfig config_;
+  Recovery* recovery_;
+  std::unique_ptr<CustomQuery> custom_query_executor_;
+};
 
 }  // namespace resdb

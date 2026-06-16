@@ -1,5 +1,5 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
+ * ;Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -21,80 +21,142 @@
 
 #include "executor/common/custom_query.h"
 #include "platform/config/resdb_config.h"
-#include "platform/consensus/ordering/2pc/checkpoint_manager.h"
 #include "platform/consensus/ordering/2pc/commitment.h"
 #include "platform/consensus/ordering/2pc/message_manager.h"
-#include "platform/consensus/ordering/2pc/performance_manager.h"
-#include "platform/consensus/ordering/2pc/query.h"
-#include "platform/consensus/ordering/2pc/response_manager.h"
-#include "platform/consensus/ordering/2pc/viewchange_manager.h"
-#include "platform/consensus/recovery/recovery.h"
 #include "platform/networkstrate/consensus_manager.h"
 
 namespace resdb {
 
 namespace twopc {
 
-class ConsensusManager2PC : public ConsensusManager {
+template <typename ReplicaCM>  
+class ShardedConsensusManager2PC : public ConsensusManager {
  public:
-  ConsensusManager2PC(const ResDBConfig& config,
-                       std::unique_ptr<TransactionManager> executor,
-                       std::unique_ptr<CustomQuery> query_executor = nullptr);
-  virtual ~ConsensusManager2PC() = default;
+
+  ShardedConsensusManager2PC(const ResDBConfig& config, std::unique_ptr<TransactionManager> executor, 
+                             std::unique_ptr<CustomQuery> query_executor = nullptr) 
+  : ConsensusManager(config),
+    replica_cm_(std::make_unique<ReplicaCM>(config, std::move(executor),  
+                                            CrossProtocolResources{ 
+                                              .rc = replica_communicator_, 
+                                              .system_info = system_info_, 
+                                              .verifier = verifier_
+                                            },
+                                            std::move(query_executor))), 
+    message_manager_(std::make_unique<MessageManager>(
+        config, system_info_, replica_cm_.get())),
+    commitment_(std::make_unique<Commitment>(config_, message_manager_.get(),
+                                            replica_communicator_, GetSignatureVerifier(),
+                                            system_info_)) {
+      global_stats_ = Stats::GetGlobalStats();
+    }
+
+  virtual ~ShardedConsensusManager2PC() = default;
 
   int ConsensusCommit(std::unique_ptr<Context> context,
-                      std::unique_ptr<Request> request) override;
+                      std::unique_ptr<Request> request) override {
+    LOG(INFO) << "recv impl type:" << request->type() << " "
+              << "sender id:" << request->sender_id()
+              << " primary:" << system_info_->GetPrimaryId();
 
-  std::vector<ReplicaInfo> GetReplicas() override;
-  uint32_t GetPrimary() override;
-  uint32_t GetVersion() override;
+    int ret = InternalConsensusCommit(std::move(context), std::move(request));
+    return ret;
+  }
 
-  void SetPrimary(uint32_t primary, uint64_t version) override;
+  void SetupPerformanceDataFunc(std::function<std::string()> func) { 
+    replica_cm_->SetupPerformanceDataFunc(std::move(func));
+  }
 
-  void Start() override;
-  void SetupPerformanceDataFunc(std::function<std::string()> func);
+  // uint32_t GetPrimary() override {
+  //   return system_info_->GetCrossShardPrimaryIdId(seq);
+  // }
 
-  void SetPreVerifyFunc(std::function<bool(const Request&)>);
-  void SetNeedCommitQC(bool need_qc);
+  uint32_t GetVersion() override {
+    return system_info_->GetCurrentView();
+  }
 
-  int ProcessRecoveryData(std::unique_ptr<Context> context,
-                          std::unique_ptr<Request> request);
+  void SetPrimary(uint32_t primary, uint64_t seq) {
+    system_info_->SetCrossShardPrimaryId(primary, seq);
+  }
 
-  int ProcessRecoveryDataResponse(std::unique_ptr<Context> context,
-                                  std::unique_ptr<Request> request);
-
- protected:
-  int InternalConsensusCommit(std::unique_ptr<Context> context,
-                              std::unique_ptr<Request> request);
-  void AddPendingRequest(std::unique_ptr<Context> context,
-                         std::unique_ptr<Request> request);
-  void AddComplainedRequest(std::unique_ptr<Context> context,
-                            std::unique_ptr<Request> request);
-  absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-  PopPendingRequest();
-  absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-  PopComplainedRequest();
-
-  void RemoteRecoveryProcess();
+  std::vector<ReplicaInfo> GetReplicas() override {
+    return config_.GetAllReplicas(); 
+  }
 
  protected:
-  std::unique_ptr<SystemInfo> system_info_;
-  std::unique_ptr<CheckPointManager> checkpoint_manager_;
+
+  int InternalConsensusCommit(
+      std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
+    LOG(ERROR) << "recv impl type:" << request->type() << " "
+              << "sender id:" << request->sender_id()
+              << " seq:" << request->seq()
+              << " primary:" << system_info_->GetPrimaryId()
+              << " is convery:" << request->is_recovery();
+
+    switch (request->type()) {
+
+      case Request::TYPE_NEW_TXNS: {
+        system_info_->SetCrossShardPrimaryId(config_.GetSelfInfo().id(), request->seq());
+      LOG(ERROR) << "[2PC] Received new txns from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                 << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
+        int ret = commitment_->ProcessNewRequest(std::move(context),
+                                                 std::move(request));
+        if (ret == -3) {
+          LOG(ERROR) << "TYPE BAD RETURN";
+        }
+        return ret;
+      }
+
+      // Received by the coordinator, used to count up the number of votes 
+      case Request::TYPE_2PC_VOTE_COMMIT: 
+      LOG(ERROR) << "[2PC] Received commit vote from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                 << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
+        return commitment_->ProcessVoteMsg(std::move(context), 
+                                           std::move(request));
+      
+
+      // Received by all participants. This is where they will respond with their vote 
+      case Request::TYPE_2PC_PREPARE:
+        system_info_->SetCrossShardPrimaryId(request->sender_id(), request->seq());
+        LOG(ERROR) << "[2PC] Received prepare from " 
+                   << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                   << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
+        return commitment_->ProcessPrepareMsg(std::move(context),
+                                              std::move(request));
+
+      // Received by all participants. This is the global descision to commit 
+      case Request::TYPE_2PC_COMMIT:
+        LOG(ERROR) << "[2PC] Received commmit from " 
+                   << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                   << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
+        return commitment_->ProcessCommitMsg(std::move(context),
+                                             std::move(request));
+
+      case Request::TYPE_2PC_COMMIT_ACK: 
+        LOG(ERROR) << "[2PC] Received commmit ack from " 
+                   << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
+                   << " primary: " << system_info_->GetCrossShardPrimaryId(request->seq());
+        return commitment_->ProcessCommitAckMsg(std::move(context), 
+                                                std::move(request));
+
+      default: 
+        return replica_cm_->ConsensusCommit(std::move(context),
+                                            std::move(request));
+    }
+    return 0;
+  }
+
+
+
+ protected:
+
+  std::unique_ptr<ReplicaCM> replica_cm_; 
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
-  std::unique_ptr<Query> query_;
-  std::unique_ptr<ResponseManager> response_manager_;
-  std::unique_ptr<PerformanceManager> performance_manager_;
-  std::unique_ptr<ViewChangeManager> view_change_manager_;
-  std::unique_ptr<Recovery> recovery_;
   Stats* global_stats_;
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_pending_;
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_complained_;
-  std::mutex mutex_;
-  std::thread recovery_thread_;
-  LockFreeQueue<Request> recovery_queue_;
+
 };
 
 } // namespace 2pc

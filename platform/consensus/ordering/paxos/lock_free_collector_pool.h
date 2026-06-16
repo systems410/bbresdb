@@ -19,34 +19,29 @@
 
 #pragma once
 
-#include "executor/common/custom_query.h"
-#include "platform/config/resdb_config.h"
-#include "platform/consensus/recovery/recovery.h"
+#include <vector>
+
+#include "platform/consensus/ordering/pbft/transaction_collector.h"
 
 namespace resdb {
 
-namespace twopc {
-
-class Query {
+class LockFreeCollectorPool {
  public:
-  Query(const ResDBConfig& config, Recovery* recovery,
-        std::unique_ptr<CustomQuery> executor = nullptr);
-  virtual ~Query();
+  LockFreeCollectorPool(const std::string& name, uint32_t size,
+                        TransactionExecutor* executor,
+                        bool enable_viewchange = false);
 
-  virtual int ProcessGetReplicaState(std::unique_ptr<Context> context,
-                                     std::unique_ptr<Request> request);
-  virtual int ProcessQuery(std::unique_ptr<Context> context,
-                           std::unique_ptr<Request> request);
+  TransactionCollector* GetCollector(uint64_t seq);
+  void Update(uint64_t seq);
+  void Reset(uint64_t start_seq);
 
-  virtual int ProcessCustomQuery(std::unique_ptr<Context> context,
-                                 std::unique_ptr<Request> request);
-
- protected:
-  ResDBConfig config_;
-  Recovery* recovery_;
-  std::unique_ptr<CustomQuery> custom_query_executor_;
+ private:
+  std::string name_;
+  uint32_t capacity_;
+  uint32_t mask_;
+  TransactionExecutor* executor_;
+  std::vector<std::unique_ptr<TransactionCollector>> collector_;
+  bool enable_viewchange_;
 };
-
-} // namespace twopc 
 
 }  // namespace resdb

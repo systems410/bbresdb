@@ -26,14 +26,13 @@
 
 namespace resdb {
 
-ConsensusManagerPBFT::ConsensusManagerPBFT(
+namespace paxos {
+
+ConsensusManagerPaxos::ConsensusManagerPaxos(
     const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
     const CrossProtocolResources& resources, std::unique_ptr<CustomQuery> query_executor) 
 
     : ConsensusManager(config, resources),
-      checkpoint_manager_(std::make_unique<CheckPointManager>(
-          config, replica_communicator_, GetSignatureVerifier(),
-          system_info_)),
       message_manager_(std::make_unique<MessageManager>(
           config, std::move(executor), checkpoint_manager_.get(),
           system_info_)),
@@ -50,19 +49,11 @@ ConsensusManagerPBFT::ConsensusManagerPBFT(
                                      config_, replica_communicator_,
                                      system_info_, GetSignatureVerifier())
                                : nullptr),
-      view_change_manager_(std::make_unique<ViewChangeManager>(
-          config_, checkpoint_manager_.get(), message_manager_.get(),
-          system_info_, replica_communicator_, GetSignatureVerifier())),
-      recovery_(std::make_unique<Recovery>(config_, checkpoint_manager_.get(),
-                                           system_info_,
-                                           message_manager_->GetStorage())),
       query_(std::make_unique<Query>(config_, recovery_.get(),
                                      std::move(query_executor))) {
   LOG(INFO) << "is running is performance mode:"
             << config_.IsPerformanceRunning();
   global_stats_ = Stats::GetGlobalStats();
-
-  view_change_manager_->SetDuplicateManager(commitment_->GetDuplicateManager());
 
   recovery_->ReadLogs(
       [&](const SystemInfoData& data) {
@@ -78,80 +69,39 @@ ConsensusManagerPBFT::ConsensusManagerPBFT(
   LOG(ERROR) << " recovery is done";
 } 
 
-ConsensusManagerPBFT::ConsensusManagerPBFT(
+ConsensusManagerPaxos::ConsensusManagerPaxos(
     const ResDBConfig& config, std::unique_ptr<TransactionManager> executor,
     std::unique_ptr<CustomQuery> query_executor)
-    : ConsensusManagerPBFT(config, std::move(executor), CrossProtocolResources(), std::move(query_executor)) {}
+    : ConsensusManagerPaxos(config, std::move(executor), CrossProtocolResources(), std::move(query_executor)) {}
 
-void ConsensusManagerPBFT::SetNeedCommitQC(bool need_qc) {
+void ConsensusManagerPaxos::SetNeedCommitQC(bool need_qc) {
   commitment_->SetNeedCommitQC(need_qc);
 }
 
-void ConsensusManagerPBFT::Start() {
+void ConsensusManagerPaxos::Start() {
   LOG(ERROR) << " ======= start";
   ConsensusManager::Start();
-  recovery_thread_ =
-      std::thread(&ConsensusManagerPBFT::RemoteRecoveryProcess, this);
 }
 
-std::vector<ReplicaInfo> ConsensusManagerPBFT::GetReplicas() {
+std::vector<ReplicaInfo> ConsensusManagerPaxos::GetReplicas() {
   return message_manager_->GetReplicas();
 }
 
-uint32_t ConsensusManagerPBFT::GetPrimary() {
+uint32_t ConsensusManagerPaxos::GetPrimary() {
   return system_info_->GetPrimaryId();
 }
 
-uint32_t ConsensusManagerPBFT::GetVersion() {
+uint32_t ConsensusManagerPaxos::GetVersion() {
   return system_info_->GetCurrentView();
 }
 
-void ConsensusManagerPBFT::SetPrimary(uint32_t primary, uint64_t version) {
-  if (version > system_info_->GetCurrentView()) {
-    system_info_->SetCurrentView(version);
-    system_info_->SetPrimary(primary);
-  }
+void ConsensusManagerPaxos::SetPrimary(uint32_t primary, uint64_t version) {
+  system_info_->SetPrimary(primary);
 }
 
-void ConsensusManagerPBFT::AddPendingRequest(std::unique_ptr<Context> context,
-                                             std::unique_ptr<Request> request) {
-  std::lock_guard<std::mutex> lk(mutex_);
-  request_pending_.push(std::make_pair(std::move(context), std::move(request)));
-}
 
-void ConsensusManagerPBFT::AddComplainedRequest(
-    std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
-  std::lock_guard<std::mutex> lk(mutex_);
-  request_complained_.push(
-      std::make_pair(std::move(context), std::move(request)));
-}
-
-absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-ConsensusManagerPBFT::PopPendingRequest() {
-  std::lock_guard<std::mutex> lk(mutex_);
-  if (request_pending_.empty()) {
-    // LOG(ERROR) << "empty:";
-    return absl::InternalError("No Data.");
-  }
-  auto new_request = std::move(request_pending_.front());
-  request_pending_.pop();
-  return new_request;
-}
-
-absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-ConsensusManagerPBFT::PopComplainedRequest() {
-  std::lock_guard<std::mutex> lk(mutex_);
-  if (request_complained_.empty()) {
-    // LOG(ERROR) << "empty:";
-    return absl::InternalError("No Data.");
-  }
-  auto new_request = std::move(request_complained_.front());
-  request_complained_.pop();
-  return new_request;
-}
-
-// The implementation of PBFT.
-int ConsensusManagerPBFT::ConsensusCommit(std::unique_ptr<Context> context,
+// The implementation of Paxos.
+int ConsensusManagerPaxos::ConsensusCommit(std::unique_ptr<Context> context,
                                           std::unique_ptr<Request> request) {
   LOG(INFO) << "recv impl type:" << request->type() << " "
             << "sender id:" << request->sender_id()
@@ -199,7 +149,7 @@ int ConsensusManagerPBFT::ConsensusCommit(std::unique_ptr<Context> context,
   return ret;
 }
 
-int ConsensusManagerPBFT::InternalConsensusCommit(
+int ConsensusManagerPaxos::InternalConsensusCommit(
     std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
   LOG(ERROR) << "recv impl type:" << request->type() << " "
              << "sender id:" << request->sender_id()
@@ -209,7 +159,7 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
 
   switch (request->type()) {
     case Request::TYPE_CLIENT_REQUEST:
-      LOG(ERROR) << "[PBFT] Received client request from " 
+      LOG(ERROR) << "[Paxos] Received client request from " 
                  << request->sender_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->StartEval();
@@ -217,8 +167,8 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->NewUserRequest(std::move(context),
                                                std::move(request));
     case Request::TYPE_RESPONSE:
-      LOG(ERROR) << "[PBFT] Received response from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq();
+      LOG(ERROR) << "[Paxos] Received response from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       if (config_.IsPerformanceRunning()) {
         return performance_manager_->ProcessResponseMsg(std::move(context),
                                                         std::move(request));
@@ -226,9 +176,8 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return response_manager_->ProcessResponseMsg(std::move(context),
                                                    std::move(request));
     case Request::TYPE_NEW_TXNS: {
-      LOG(ERROR) << "[PBFT] Received new txns from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
-                 << " primary: " << GetPrimary(); 
+      LOG(ERROR) << "[Paxos] Received new txns from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       uint64_t proxy_id = request->proxy_id();
       std::string hash = request->hash();
       int ret = commitment_->ProcessNewRequest(std::move(context),
@@ -251,21 +200,18 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
       return ret;
     }
     case Request::TYPE_PRE_PREPARE:
-      LOG(ERROR) << "[PBFT] Received pre-prepare from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
-                 << " primary: " << GetPrimary(); 
+      LOG(ERROR) << "[Paxos] Received pre-prepare from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessProposeMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_PREPARE:
-      LOG(ERROR) << "[PBFT] Received prepare from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
-                 << " primary: " << GetPrimary(); 
+      LOG(ERROR) << "[Paxos] Received prepare from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessPrepareMsg(std::move(context),
                                             std::move(request));
     case Request::TYPE_COMMIT:
-      LOG(ERROR) << "[PBFT] Received commit from " 
-                 << request->sender_id() << " with shard id " << request->sender_shard_id() << " seq: " << request->seq()
-                 << " primary: " << GetPrimary(); 
+      LOG(ERROR) << "[Paxos] Received commit from " 
+                 << request->sender_id() << " with shard id " << request->sender_shard_id();
       return commitment_->ProcessCommitMsg(std::move(context),
                                            std::move(request));
     case Request::TYPE_CHECKPOINT:
@@ -296,17 +242,17 @@ int ConsensusManagerPBFT::InternalConsensusCommit(
   return 0;
 }
 
-void ConsensusManagerPBFT::SetupPerformanceDataFunc(
+void ConsensusManagerPaxos::SetupPerformanceDataFunc(
     std::function<std::string()> func) {
   performance_manager_->SetDataFunc(func);
 }
 
-void ConsensusManagerPBFT::SetPreVerifyFunc(
+void ConsensusManagerPaxos::SetPreVerifyFunc(
     std::function<bool(const Request&)> func) {
   commitment_->SetPreVerifyFunc(func);
 }
 
-int ConsensusManagerPBFT::ProcessRecoveryData(
+int ConsensusManagerPaxos::ProcessRecoveryData(
     std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
   RecoveryRequest recovery_data;
   if (!recovery_data.ParseFromString(request->data())) {
@@ -339,13 +285,13 @@ int ConsensusManagerPBFT::ProcessRecoveryData(
   return 0;
 }
 
-int ConsensusManagerPBFT::ProcessRecoveryDataResponse(
+int ConsensusManagerPaxos::ProcessRecoveryDataResponse(
     std::unique_ptr<Context> context, std::unique_ptr<Request> request) {
   recovery_queue_.Push(std::move(request));
   return 0;
 }
 
-void ConsensusManagerPBFT::RemoteRecoveryProcess() {
+void ConsensusManagerPaxos::RemoteRecoveryProcess() {
   uint64_t last_recovery = 0;
   std::set<uint64_t> data;
 
@@ -392,5 +338,5 @@ void ConsensusManagerPBFT::RemoteRecoveryProcess() {
     }
   }
 }
-
+} // namespace paxos
 }  // namespace resdb

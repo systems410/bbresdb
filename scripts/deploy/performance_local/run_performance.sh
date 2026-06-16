@@ -18,6 +18,9 @@
 #
 
 
+killall -9 kv_service
+killall -9 kv_server_perfo
+
 wd=$(pwd)
 cd ../../
 ./bbrun.sh || exit 1
@@ -38,7 +41,7 @@ killall -9 ${server_bin}
 
 echo "getting results"
 sleep 1
-for (( idx=1; idx<6; idx++ )); do 
+for (( idx=1; idx<18; idx++ )); do 
     cp ./resilientdb_app/${idx}/${server_bin}.log result_${idx}_log
 done 
 

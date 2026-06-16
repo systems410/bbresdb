@@ -34,8 +34,6 @@
 
 namespace resdb {
 
-namespace twopc {
-
 class CheckPointManager : public CheckPoint {
  public:
   CheckPointManager(const ResDBConfig& config,
@@ -148,5 +146,4 @@ class CheckPointManager : public CheckPoint {
   std::map<int, std::pair<int, uint64_t>> view_status_;
 };
 
-} // namespace twopc 
 }  // namespace resdb

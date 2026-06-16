@@ -17,13 +17,12 @@
  * under the License.
  */
 
-#include "platform/consensus/ordering/2pc/query.h"
+#include "platform/consensus/ordering/pbft/query.h"
 
 #include <glog/logging.h>
 #include <unistd.h>
 
 namespace resdb {
-namespace twopc {
 
 Query::Query(const ResDBConfig& config, Recovery* recovery,
              std::unique_ptr<CustomQuery> executor)
@@ -150,5 +149,4 @@ int Query::ProcessCustomQuery(std::unique_ptr<Context> context,
   return 0;
 }
 
-} 
 }  // namespace resdb

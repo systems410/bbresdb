@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include "platform/consensus/ordering/2pc/lock_free_collector_pool.h"
+#include "platform/consensus/ordering/pbft/lock_free_collector_pool.h"
 
 #include <glog/logging.h>
 
@@ -32,18 +32,22 @@ uint32_t GetCapacity(uint32_t size) {
 }
 }  // namespace
 
-namespace twopc {
-
 LockFreeCollectorPool::LockFreeCollectorPool(const std::string& name,
-                                             uint32_t size)
+                                             uint32_t size,
+                                             TransactionExecutor* executor,
+                                             bool enable_viewchange)
     : name_(name),
       capacity_(GetCapacity(size * 2)),
-      mask_((capacity_ << 1) - 1) {
+      mask_((capacity_ << 1) - 1),
+      executor_(executor),
+      enable_viewchange_(enable_viewchange) {
   collector_.resize(capacity_ << 1);
   for (size_t i = 0; i < (capacity_ << 1); ++i) {
-    collector_[i] = std::make_unique<TransactionCollector>(i);
+    collector_[i] = std::make_unique<TransactionCollector>(i, executor_,
+                                                           enable_viewchange_);
   }
-  LOG(ERROR) << "name:" << name_ << " create pool done. capacity:" << capacity_ << " done";
+  LOG(ERROR) << "name:" << name_ << " create pool done. capacity:" << capacity_
+             << " enable viewchange:" << enable_viewchange_ << " done";
 }
 
 void LockFreeCollectorPool::Reset(uint64_t start_seq) {
@@ -52,7 +56,8 @@ void LockFreeCollectorPool::Reset(uint64_t start_seq) {
   LOG(ERROR) << " reset collector:" << start_seq;
   for (size_t i = 0; i < (capacity_ << 1); ++i) {
     int pos = (i + idx) % (capacity_ << 1);
-    collector_[pos] = std::make_unique<TransactionCollector>(seq++);
+    collector_[pos] = std::make_unique<TransactionCollector>(
+        seq++, executor_, enable_viewchange_);
   }
   LOG(ERROR) << " reset collector:" << start_seq;
 }
@@ -66,7 +71,7 @@ void LockFreeCollectorPool::Update(uint64_t seq) {
   LOG(ERROR) << " update:" << (idx ^ capacity_) << " seq:" << seq + capacity_
              << " cap:" << capacity_ << " update seq:" << seq;
   collector_[idx ^ capacity_] = std::make_unique<TransactionCollector>(
-      seq + capacity_);
+      seq + capacity_, executor_, enable_viewchange_);
 }
 
 TransactionCollector* LockFreeCollectorPool::GetCollector(uint64_t seq) {
@@ -74,5 +79,4 @@ TransactionCollector* LockFreeCollectorPool::GetCollector(uint64_t seq) {
   return collector_[idx].get();
 }
 
-} // namespace 2pc
 }  // namespace resdb

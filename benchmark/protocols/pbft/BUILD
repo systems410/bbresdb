@@ -28,6 +28,7 @@ cc_binary(
         "//executor/kv:kv_executor",
         "//platform/config:resdb_config_utils",
         "//platform/consensus/ordering/pbft:consensus_manager_pbft",
+        "//platform/consensus/ordering/2pc:consensus_manager_2pc",
         "//service/utils:server_factory",
     ],
 )

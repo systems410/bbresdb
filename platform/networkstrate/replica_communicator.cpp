@@ -177,6 +177,8 @@ int ReplicaCommunicator::SendSingleMessage(
   std::string ip = replica_info.ip();
   int port = replica_info.port();
 
+
+
   // LOG(ERROR)<<" send msg ip:"<<ip<<" port:"<<port;
   global_stats_->BroadCastMsg();
   if (is_use_long_conn_) {
@@ -252,13 +254,11 @@ int ReplicaCommunicator::SendMessageFromPool(
     if (client == nullptr) {
       continue;
     }
-    // LOG(ERROR) << "send to:" << replica.ip();
     if (client->SendMessage(data) == 0) {
       ret++;
     } else {
       LOG(ERROR) << "send to:" << replica.ip() << " fail";
     }
-    // LOG(ERROR) << "send to:" << replica.ip()<<" done";
   }
   return ret;
 }
@@ -298,10 +298,54 @@ std::unique_ptr<NetChannel> ReplicaCommunicator::GetClient(
   return std::make_unique<NetChannel>(ip, port);
 }
 
+
 void ReplicaCommunicator::BroadCast(const google::protobuf::Message& message) {
   int ret = SendMessage(message);
   if (ret < 0) {
     LOG(ERROR) << "broadcast request fail:";
+  }
+}
+void ReplicaCommunicator::SendMessages(const google::protobuf::Message& message, const std::vector<ReplicaInfo>& replicas)
+{
+  for (const auto& target_replica : replicas)
+  {
+    if (target_replica.ip().empty()) {
+      LOG(ERROR) << "no replica info";
+      return;
+    }
+
+    int ret = SendMessage(message, target_replica);
+    if (ret < 0) {
+      LOG(ERROR) << "broadcast request fail:";
+    }
+  }
+}
+
+void ReplicaCommunicator::SendMessageTo(const google::protobuf::Message& message, const std::set<uint32_t>& replicas) { 
+  for (const auto& replica : replicas_) {
+    if (replicas.find(replica.id()) != replicas.end()) {
+      SendMessage(message, replica.id());
+    }  
+  }
+}
+
+void ReplicaCommunicator::SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id)
+{
+  std::vector<ReplicaInfo> targets; 
+  for (const auto& replica : replicas_) {
+    if (replica.shard_id() == shard_id) {
+      SendMessage(message, replica.id());
+    }
+  }
+}
+
+void ReplicaCommunicator::SendMessageToShard(const google::protobuf::Message& message, uint32_t shard_id, const ReplicaInfo& self)
+{
+  std::vector<ReplicaInfo> targets; 
+  for (const auto& replica : replicas_) {
+    if (replica.shard_id() == shard_id && replica.id() != self.id()) {
+      SendMessage(message, replica.id());
+    }
   }
 }
 

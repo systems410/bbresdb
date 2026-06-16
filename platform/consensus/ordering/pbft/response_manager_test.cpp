@@ -64,6 +64,7 @@ class ResponseManagerTest : public Test {
     request.set_seq(1);
     request.set_type(Request::TYPE_RESPONSE);
     request.set_sender_id(sender_id);
+    request.set_sender_shard_id(1);
     request.set_data("resp_data");
     batch_resp.SerializeToString(request.mutable_data());
 
@@ -123,6 +124,7 @@ TEST_F(ResponseManagerTest, ProcessResponse) {
 
   Request request;
   request.set_sender_id(1);
+  request.set_sender_shard_id(1);
   request.set_current_view(1);
   request.set_seq(1);
   request.set_proxy_id(1);
@@ -154,6 +156,7 @@ TEST_F(ResponseManagerTest, ProcessResponseWithMoreResp) {
 
   Request request;
   request.set_sender_id(1);
+  request.set_sender_shard_id(1);
   request.set_current_view(1);
   request.set_seq(1);
   request.set_proxy_id(1);
@@ -187,6 +190,7 @@ TEST_F(ResponseManagerTest, ProcessResponseWithSameSender) {
 
   Request request;
   request.set_sender_id(1);
+  request.set_sender_shard_id(1);
   request.set_current_view(1);
   request.set_seq(1);
   request.set_proxy_id(1);

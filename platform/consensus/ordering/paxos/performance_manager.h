@@ -25,15 +25,13 @@
 #include <queue>
 
 #include "platform/config/resdb_config.h"
-#include "platform/consensus/ordering/2pc/lock_free_collector_pool.h"
+#include "platform/consensus/ordering/pbft/lock_free_collector_pool.h"
 #include "platform/consensus/ordering/common/transaction_utils.h"
-#include "platform/consensus/execution/system_info.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
-namespace resdb {
 
-namespace twopc {
+namespace resdb {
 
 class PerformanceClientTimeout {
  public:
@@ -63,7 +61,7 @@ class PerformanceManager {
   // Add response messages which will be sent back to the caller
   // if there are f+1 same messages.
   CollectorResultCode AddResponseMsg(
-      std::unique_ptr<Context> context, std::unique_ptr<Request> request,
+      const SignatureInfo& signature, std::unique_ptr<Request> request,
       std::function<void(const Request&,
                          const TransactionCollector::CollectorDataType*)>
           call_back);
@@ -78,6 +76,7 @@ class PerformanceManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
+  uint32_t GetNextShardPrimary(); 
   std::unique_ptr<Request> GenerateUserRequest();
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
@@ -116,7 +115,9 @@ class PerformanceManager {
   sem_t request_sent_signal_;
   uint64_t highest_seq_;
   uint64_t highest_seq_primary_id_;
+
+  std::vector<uint32_t> shard_primaries_; 
+  uint32_t current_shard_primary_idx_ = 0; 
 };
 
-} // namespace 2pc 
 }  // namespace resdb

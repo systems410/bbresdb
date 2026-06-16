@@ -23,7 +23,6 @@
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/execution/duplicate_manager.h"
 #include "platform/consensus/ordering/2pc/message_manager.h"
-#include "platform/consensus/ordering/2pc/response_manager.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
@@ -34,51 +33,49 @@ namespace twopc
 
 class Commitment {
  public:
-  Commitment(const ResDBConfig& config, MessageManager* message_manager,
+  Commitment(const ResDBConfig& config, 
+             MessageManager* message_manager,
              ReplicaCommunicator* replica_communicator,
-             SignatureVerifier* verifier);
+             SignatureVerifier* verifier,  
+             SystemInfo* info);
   virtual ~Commitment();
 
   virtual int ProcessNewRequest(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> user_request);
 
-  virtual int ProcessProposeMsg(std::unique_ptr<Context> context,
-                                std::unique_ptr<Request> request);
   virtual int ProcessPrepareMsg(std::unique_ptr<Context> context,
                                 std::unique_ptr<Request> request);
   virtual int ProcessCommitMsg(std::unique_ptr<Context> context,
                                std::unique_ptr<Request> request);
 
-  void SetPreVerifyFunc(std::function<bool(const Request& request)> func);
-  void SetNeedCommitQC(bool need_qc);
 
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_complained_;
+  /// @brief Intended for the primary only. Process a vote message, adding a message to the 
+  ///        vote count of this transaction. 
+  /// @param context 
+  /// @param request 
+  /// @return 
+  int ProcessVoteMsg(std::unique_ptr<Context> context,
+                             std::unique_ptr<Request> request);
+
+  int ProcessCommitAckMsg(std::unique_ptr<Context> context, std::unique_ptr<Request> request);
 
   std::mutex rc_mutex_;
 
   DuplicateManager* GetDuplicateManager();
 
  protected:
-  virtual int PostProcessExecutedMsg();
+  std::set<uint32_t> GetShardPrimaryIds(); 
 
  protected:
+ 
   ResDBConfig config_;
+  SignatureVerifier* verifier_;
   MessageManager* message_manager_;
-  std::thread executed_thread_;
-  std::atomic<bool> stop_;
+  SystemInfo* system_info_; 
   ReplicaCommunicator* replica_communicator_;
 
-  SignatureVerifier* verifier_;
   Stats* global_stats_;
 
-  std::function<bool(const Request& request)> pre_verify_func_;
-  bool need_qc_ = false;
-
-  std::mutex mutex_;
-  std::map<uint64_t,
-           std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      pending_recovery_;
   std::unique_ptr<DuplicateManager> duplicate_manager_;
 };
 

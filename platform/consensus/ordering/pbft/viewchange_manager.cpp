@@ -22,7 +22,7 @@
 #include <glog/logging.h>
 
 #include "common/utils/utils.h"
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/proto/viewchange_message.pb.h"
 
 namespace resdb {
@@ -188,17 +188,17 @@ uint32_t ViewChangeManager::AddRequest(
 
 bool ViewChangeManager::IsNextPrimary(uint64_t view_number) {
   std::lock_guard<std::mutex> lk(mutex_);
-  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos();
-  return config_.GetReplicaInfos()[(view_number - 1) % replicas.size()].id() ==
+  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos(config_.GetSelfShard());
+  return config_.GetReplicaInfos(config_.GetSelfShard())[(view_number - 1) % replicas.size()].id() ==
          config_.GetSelfInfo().id();
 }
 
 void ViewChangeManager::SetCurrentViewAndNewPrimary(uint64_t view_number) {
   system_info_->SetCurrentView(view_number);
 
-  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos();
+  const std::vector<ReplicaInfo>& replicas = config_.GetReplicaInfos(config_.GetSelfShard());
   uint32_t id =
-      config_.GetReplicaInfos()[(view_number - 1) % replicas.size()].id();
+      config_.GetReplicaInfos(config_.GetSelfShard())[(view_number - 1) % replicas.size()].id();
   system_info_->SetPrimary(id);
   global_stats_->ChangePrimary(id);
   LOG(ERROR) << "View Change Happened: primary:" << id
@@ -244,7 +244,7 @@ std::vector<std::unique_ptr<Request>> ViewChangeManager::GetPrepareMsg(
                  << " prepared, type:" << prepared_msg[i].type();
     }
     std::unique_ptr<Request> user_request = resdb::NewRequest(
-        Request::TYPE_PRE_PREPARE, Request(), config_.GetSelfInfo().id());
+        Request::TYPE_PRE_PREPARE, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
     user_request->set_seq(i);
     user_request->set_current_view(new_view_message.view_number());
     user_request->set_hash("null" + std::to_string(i));
@@ -343,7 +343,7 @@ int ViewChangeManager::ProcessNewView(std::unique_ptr<Context> context,
         checkpoint_manager_->SetHighestPreparedSeq(
             new_view_message.request(i).seq());
       }
-      replica_communicator_->BroadCast(new_view_message.request(i));
+      replica_communicator_->SendMessageToShard(new_view_message.request(i), config_.GetSelfShard());
     }
   }
 
@@ -429,10 +429,10 @@ void ViewChangeManager::SendNewViewMsg(uint64_t view_number) {
 
   // Broadcast my new view request.
   std::unique_ptr<Request> request =
-      NewRequest(Request::TYPE_NEWVIEW, Request(), config_.GetSelfInfo().id());
+      NewRequest(Request::TYPE_NEWVIEW, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
 
   new_view_message.SerializeToString(request->mutable_data());
-  replica_communicator_->BroadCast(*request);
+  replica_communicator_->SendMessageToShard(*request, config_.GetSelfShard());
 }
 
 void ViewChangeManager::SendViewChangeMsg() {
@@ -480,9 +480,9 @@ void ViewChangeManager::SendViewChangeMsg() {
 
   // Broadcast my view change request.
   std::unique_ptr<Request> request = NewRequest(
-      Request::TYPE_VIEWCHANGE, Request(), config_.GetSelfInfo().id());
+      Request::TYPE_VIEWCHANGE, Request(), config_.GetSelfInfo().id(), config_.GetSelfShard());
   view_change_message.SerializeToString(request->mutable_data());
-  replica_communicator_->BroadCast(*request);
+  replica_communicator_->SendMessageToShard(*request, config_.GetSelfShard());
 }
 
 void ViewChangeManager::AddComplaintTimer(uint64_t proxy_id, std::string hash) {

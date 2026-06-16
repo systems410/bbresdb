@@ -26,7 +26,7 @@
 namespace resdb {
 
 std::vector<ReplicaInfo> ReadConfig(const std::string& file_name);
-ReplicaInfo GenerateReplicaInfo(int id, const std::string& ip, int port);
+ReplicaInfo GenerateReplicaInfo(int id, const std::string& ip, int port, int shard_id);
 
 typedef std::function<std::unique_ptr<ResDBConfig>(
     const ResConfigData& config_data, const ReplicaInfo& self_info,

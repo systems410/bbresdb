@@ -54,7 +54,8 @@ absl::StatusOr<std::string> TransactionConstructor::GetResponseData(
   //         << " need:" << config_.GetMinClientReceiveNum()
   //        << " data len:" << resp_str.size();
   if (hash_counter.size() >=
-      static_cast<size_t>(config_.GetMinClientReceiveNum())) {
+  // TODO 
+      static_cast<size_t>(config_.GetMinClientReceiveNum(1))) {
     return resp_str;
   }
   return absl::InvalidArgumentError("data not enough");
@@ -63,14 +64,14 @@ absl::StatusOr<std::string> TransactionConstructor::GetResponseData(
 int TransactionConstructor::SendRequest(
     const google::protobuf::Message& message, Request::Type type) {
   // Use the replica obtained from the server.
-  NetChannel::SetDestReplicaInfo(config_.GetReplicaInfos()[0]);
+  NetChannel::SetDestReplicaInfo(config_.GetClientInfos()[0]);
   return NetChannel::SendRequest(message, type, false);
 }
 
 int TransactionConstructor::SendRequest(
     const google::protobuf::Message& message,
     google::protobuf::Message* response, Request::Type type) {
-  NetChannel::SetDestReplicaInfo(config_.GetReplicaInfos()[0]);
+  NetChannel::SetDestReplicaInfo(config_.GetClientInfos()[0]);
   int ret = NetChannel::SendRequest(message, type, true);
   if (ret == 0) {
     std::string resp_str;

@@ -33,7 +33,9 @@
 
 namespace resdb {
 
-class ConsensusManagerPBFT : public ConsensusManager {
+namespace paxos {
+
+class ConsensusManagerPaxos : public ConsensusManager {
  public:
 
   ConsensusManagerPBFT(const ResDBConfig& config,
@@ -71,34 +73,15 @@ class ConsensusManagerPBFT : public ConsensusManager {
  protected:
   int InternalConsensusCommit(std::unique_ptr<Context> context,
                               std::unique_ptr<Request> request);
-  void AddPendingRequest(std::unique_ptr<Context> context,
-                         std::unique_ptr<Request> request);
-  void AddComplainedRequest(std::unique_ptr<Context> context,
-                            std::unique_ptr<Request> request);
-  absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-  PopPendingRequest();
-  absl::StatusOr<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-  PopComplainedRequest();
-
-  void RemoteRecoveryProcess();
 
  protected:
-  std::unique_ptr<CheckPointManager> checkpoint_manager_;
   std::unique_ptr<MessageManager> message_manager_;
   std::unique_ptr<Commitment> commitment_;
   std::unique_ptr<Query> query_;
   std::unique_ptr<ResponseManager> response_manager_;
   std::unique_ptr<PerformanceManager> performance_manager_;
-  std::unique_ptr<ViewChangeManager> view_change_manager_;
-  std::unique_ptr<Recovery> recovery_;
   Stats* global_stats_;
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_pending_;
-  std::queue<std::pair<std::unique_ptr<Context>, std::unique_ptr<Request>>>
-      request_complained_;
-  std::mutex mutex_;
-  std::thread recovery_thread_;
-  LockFreeQueue<Request> recovery_queue_;
 };
 
+} // namespace paxos 
 }  // namespace resdb

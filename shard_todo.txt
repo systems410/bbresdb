@@ -1,0 +1,10 @@
+- Figure out a way for the proxy to know how many responses have been received 
+from each shard 
+
+- Add guards in PBFT protocol to verify messages were sent within the same shard 
+
+- Shard the data to figure out what replica to send it to 
+
+- Run 2PC across the primaries, probably make a new 2PC manager  
+
+

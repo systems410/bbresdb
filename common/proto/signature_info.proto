@@ -56,6 +56,7 @@ message CertificateKeyInfo {
     Type type = 3;
     string ip = 4;
     int32 port = 5;
+    uint32 shard_id = 6;
     // the ip:port the replica uses, if it is a client node, can be ignored.
 }
 

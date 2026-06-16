@@ -24,14 +24,13 @@
 #include "common/crypto/signature_verifier.h"
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/execution/system_info.h"
-#include "platform/consensus/ordering/2pc/checkpoint_manager.h"
-#include "platform/consensus/ordering/2pc/message_manager.h"
+#include "platform/consensus/ordering/pbft/checkpoint_manager.h"
+#include "platform/consensus/ordering/pbft/message_manager.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/proto/viewchange_message.pb.h"
 #include "platform/statistic/stats.h"
 
 namespace resdb {
-namespace twopc {
 
 enum ViewChangeTimerType { TYPE_COMPLAINT, TYPE_VIEWCHANGE, TYPE_NEWVIEW };
 
@@ -158,5 +157,4 @@ class ViewChangeManager {
   DuplicateManager* duplicate_manager_;
 };
 
-}
 }  // namespace resdb

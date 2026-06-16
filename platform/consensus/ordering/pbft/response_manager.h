@@ -22,7 +22,7 @@
 
 #include "platform/config/resdb_config.h"
 #include "platform/consensus/ordering/pbft/lock_free_collector_pool.h"
-#include "platform/consensus/ordering/pbft/transaction_utils.h"
+#include "platform/consensus/ordering/common/transaction_utils.h"
 #include "platform/networkstrate/replica_communicator.h"
 #include "platform/statistic/stats.h"
 
@@ -75,6 +75,7 @@ class ResponseManager {
   int DoBatch(const std::vector<std::unique_ptr<QueueItem>>& batch_req);
   int BatchProposeMsg();
   int GetPrimary();
+  uint32_t GetPrimaryOfShard(uint32_t shard_id); 
 
   void AddWaitingResponseRequest(std::unique_ptr<Request> request);
   void RemoveWaitingResponseRequest(const std::string& hash);
@@ -83,7 +84,9 @@ class ResponseManager {
   void MonitoringClientTimeOut();
   std::unique_ptr<Request> GetTimeOutRequest(std::string hash);
 
- private:
+  uint32_t GetNextPrimary();
+
+private: 
   ResDBConfig config_;
   ReplicaCommunicator* replica_communicator_;
   std::unique_ptr<LockFreeCollectorPool> collector_pool_, context_pool_;
@@ -104,6 +107,12 @@ class ResponseManager {
   sem_t request_sent_signal_;
   uint64_t highest_seq_;
   uint64_t highest_seq_primary_id_;
+
+  std::vector<uint32_t> shard_primaries_; 
+
+  uint64_t seq_ = 1; 
+
+  size_t current_shard_primary_idx_ = 0; 
 };
 
 }  // namespace resdb

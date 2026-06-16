@@ -25,8 +25,6 @@
 
 namespace resdb {
 
-namespace twopc {
-
 class MockCheckPointManager : public CheckPointManager {
  public:
   MockCheckPointManager(const ResDBConfig& config,
@@ -46,5 +44,4 @@ class MockCheckPointManager : public CheckPointManager {
               (override));
 };
 
-} // namespace 2pc 
 }  // namespace resdb

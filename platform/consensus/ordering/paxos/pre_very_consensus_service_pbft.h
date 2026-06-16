@@ -22,7 +22,6 @@
 #include "platform/consensus/ordering/pbft/consensus_service_pbft.h"
 
 namespace resdb {
-namespace 2pc {
 
 template <typename RequestType>
 class PreVerifyConsensusServicePBFT : public ConsensusServicePBFT {
@@ -53,5 +52,4 @@ void PreVerifyConsensusServicePBFT<RequestType>::SetPreVerifyFunc() {
   });
 }
 
-} // namespace 2pc
 }  // namespace resdb

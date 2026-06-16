@@ -41,14 +41,32 @@ class SystemInfo {
   void ProcessRequest(const SystemInfoRequest& request);
 
   uint32_t GetPrimaryId() const;
+  uint32_t GetPrimaryIdOfShard(uint32_t shard_id); 
+  std::set<uint32_t> GetAllShardPrimaryIds();
   void SetPrimary(uint32_t id);
+  void SetPrimaryOfShard(uint32_t shard_id, uint32_t id);
+
+  void SetCrossShardPrimaryId(uint32_t id, uint64_t seq);
+  uint32_t GetCrossShardPrimaryId(uint64_t seq);
 
   uint64_t GetCurrentView() const;
   void SetCurrentView(uint64_t);
 
  private:
+  uint32_t self_shard_; 
   std::vector<ReplicaInfo> replicas_;
+
+  // All shard primary ids 
+  std::mutex shard_primary_ids_mut_; 
+  std::unordered_map<uint32_t, uint32_t> shard_primary_ids_; 
+
+  // Represents this shards primary ids 
   std::atomic<uint32_t> primary_id_;
   std::atomic<uint64_t> view_;
+
+  // maps seq -> cross shard primary 
+  std::unordered_map<uint64_t, uint32_t> cross_shard_primaries_; 
+  std::mutex cross_shard_primaries_mut_; 
+
 };
 }  // namespace resdb

@@ -63,7 +63,7 @@ PerformanceManager::PerformanceManager(
           .public_key()
           .public_key_info()
           .type() == CertificateKeyInfo::CLIENT) {
-    for (int i = 0; i < 1; ++i) {
+    for (int i = 0; i < 2; ++i) {
       user_req_thread_[i] =
           std::thread(&PerformanceManager::BatchProposeMsg, this);
     }
@@ -72,6 +72,9 @@ PerformanceManager::PerformanceManager(
   checking_timeout_thread_ =
       std::thread(&PerformanceManager::MonitoringClientTimeOut, this);
   global_stats_ = Stats::GetGlobalStats();
+  for (size_t i = 0; i <= config_.GetReplicaNum(config_.GetSelfShard()); i++) {
+    send_num_.push_back(0);
+  }
   total_num_ = 0;
   timeout_length_ = 100000000;  // 10s
 
@@ -79,7 +82,6 @@ PerformanceManager::PerformanceManager(
   for (uint32_t id : shards) { 
     shard_primaries_.push_back(id);
   }
-  current_shard_primary_idx_ = shard_primaries_[0];
 }
 
 PerformanceManager::~PerformanceManager() {
@@ -176,6 +178,7 @@ bool PerformanceManager::MayConsensusChangeStatus(
     case Request::TYPE_RESPONSE:
       // if receive f+1 response results, ack to the caller.
       if (*status == TransactionStatue::None &&
+        // SHARD TODO
           config_.GetMinClientReceiveNum(1) <= received_count) {
         TransactionStatue old_status = TransactionStatue::None;
         return status->compare_exchange_strong(
@@ -187,9 +190,9 @@ bool PerformanceManager::MayConsensusChangeStatus(
   return false;
 }
 
-uint32_t PerformanceManager::GetNextPrimary() { 
+uint32_t PerformanceManager::GetNextShardPrimary() { 
   uint32_t id = shard_primaries_[current_shard_primary_idx_];
-  if (++current_shard_primary_idx_ >= shard_primaries_.size()) {
+  if (++current_shard_primary_idx_ >= shard_primaries_.size()) { 
     current_shard_primary_idx_ = 0; 
   } 
   return id; 
@@ -238,10 +241,6 @@ CollectorResultCode PerformanceManager::AddResponseMsg(
   return CollectorResultCode::OK;
 }
 
-uint32_t PerformanceManager::GetPrimaryOfShard(uint32_t shard_id) { 
-  return system_info_->GetPrimaryIdOfShard(shard_id); 
-}
-
 void PerformanceManager::SendResponseToClient(
     const BatchUserResponse& batch_response) {
   uint64_t create_time = batch_response.createtime();
@@ -254,8 +253,8 @@ void PerformanceManager::SendResponseToClient(
   }
   {
     // std::lock_guard<std::mutex> lk(mutex_);
-    if (send_num_ > 0) {
-      send_num_--;
+    if (send_num_[batch_response.primary_id()] > 0) {
+      send_num_[batch_response.primary_id()]--;
     }
   }
 
@@ -273,8 +272,7 @@ int PerformanceManager::BatchProposeMsg() {
   eval_ready_future_.get();
   while (!stop_) {
     // std::lock_guard<std::mutex> lk(mutex_);
-    if (send_num_ >= config_.GetMaxProcessTxn()) {
-
+    if (send_num_[GetPrimary()] >= config_.GetMaxProcessTxn()) {
       usleep(100000);
       continue;
     }
@@ -341,12 +339,10 @@ int PerformanceManager::DoBatch(
 
   new_request->set_hash(SignatureVerifier::CalculateHash(new_request->data()));
   new_request->set_proxy_id(config_.GetSelfInfo().id());
-  new_request->set_seq(seq_++);
 
-  uint32_t next_primary = GetNextPrimary(); 
-  replica_communicator_->SendMessage(*new_request, next_primary);
+  replica_communicator_->SendMessage(*new_request, GetPrimary());
   global_stats_->BroadCastMsg();
-  send_num_++;
+  send_num_[GetPrimary()]++;
   if (total_num_++ == 1000000) {
     stop_ = true;
     LOG(WARNING) << "total num is done:" << total_num_;

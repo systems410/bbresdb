@@ -121,7 +121,8 @@ then
  rm -rf ${home_path}/${main_folder}
 fi
 
-for (( i=1; i<6; i++ )); do
+total_ips=${#iplist[@]}
+for (( i=1; i<=total_ips; i++ )); do
   mkdir -p "${home_path}/${main_folder}/$i"
 done
 
